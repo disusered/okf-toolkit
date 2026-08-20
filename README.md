@@ -27,4 +27,5 @@ pnpm check
 
 The [`docs/adr`](docs/adr/) directory contains the architecture decisions.
 [`docs/MIGRATION.md`](docs/MIGRATION.md) defines the coordinated consumer
-migration and its completion checks.
+migration and its completion checks. [`docs/RELEASE.md`](docs/RELEASE.md)
+defines the signed-tag release process.

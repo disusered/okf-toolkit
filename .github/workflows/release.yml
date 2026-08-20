@@ -1,0 +1,450 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'disusered/okf-toolkit'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_DIRECTORY: ${{ runner.temp }}/okf-release
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: |
+          node scripts/verify-release.mjs \
+            --tag "$RELEASE_TAG" \
+            --prerelease "${{ github.event.release.prerelease }}"
+
+      - name: Verify the signed annotated tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag_ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")"
+          tag_sha="$(jq -er 'select(.object.type == "tag") | .object.sha' <<<"$tag_ref")"
+          tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha")"
+          commit_sha="$(git rev-parse HEAD)"
+          jq -e --arg commit "$commit_sha" '
+            .verification.verified == true and
+            .verification.reason == "valid" and
+            .object.type == "commit" and
+            .object.sha == $commit
+          ' <<<"$tag_object"
+          git merge-base --is-ancestor "$commit_sha" origin/main
+
+      - name: Pack and verify release artifacts
+        run: |
+          pnpm pack:release -- "$RELEASE_DIRECTORY"
+          (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
+          jq -e --arg tag "$RELEASE_TAG" '
+            .schema == "okf.release.v1" and
+            .tag == $tag and
+            (.packages | length) == 7
+          ' "$RELEASE_DIRECTORY/RELEASE.json"
+          node scripts/verify-release-artifacts.mjs \
+            --tag "$RELEASE_TAG" \
+            --directory "$RELEASE_DIRECTORY"
+          node scripts/check-release-install.mjs \
+            --tag "$RELEASE_TAG" \
+            --directory "$RELEASE_DIRECTORY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: okf-toolkit-${{ github.event.release.tag_name }}
+          path: ${{ runner.temp }}/okf-release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    environment: npm-release
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DIST_TAG: ${{ github.event.release.prerelease && 'next' || 'latest' }}
+      RELEASE_DIRECTORY: ${{ runner.temp }}/okf-release
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Verify release environment configuration
+        run: test "${{ vars.NPM_RELEASE_GATE }}" = enabled
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: okf-toolkit-${{ github.event.release.tag_name }}
+          path: ${{ runner.temp }}/okf-release
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify release artifacts and npm
+        run: |
+          (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
+          jq -e --arg tag "$RELEASE_TAG" '
+            .schema == "okf.release.v1" and
+            .tag == $tag and
+            (.packages | length) == 7
+          ' "$RELEASE_DIRECTORY/RELEASE.json"
+          npm_version="$(npm --version)"
+          npm_major="${npm_version%%.*}"
+          npm_remainder="${npm_version#*.}"
+          npm_minor="${npm_remainder%%.*}"
+          npm_patch="${npm_remainder#*.}"
+          npm_patch="${npm_patch%%[-+]*}"
+          ((
+            npm_major > 11 ||
+            (npm_major == 11 && npm_minor > 5) ||
+            (npm_major == 11 && npm_minor == 5 && npm_patch >= 1)
+          ))
+
+      - name: Reject an older distribution-tag version
+        run: |
+          node --input-type=module --eval '
+            const names = [
+              "okf-contracts", "okf-core", "okf-viz", "okf-node",
+              "okf-signatures", "okf-cloudflare", "okf-cli",
+            ];
+            const candidate = process.argv[1];
+            const tag = process.argv[2];
+            const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+            const parse = (value) => {
+              const match = pattern.exec(value);
+              if (!match) throw new Error(`invalid registry SemVer: ${value}`);
+              return {
+                core: match.slice(1, 4).map(BigInt),
+                prerelease: match[4]?.split(".") ?? [],
+              };
+            };
+            const packageMetadata = async (name) => {
+              const delays = [0, 1000, 2000, 4000];
+              let lastError;
+              for (const delay of delays) {
+                if (delay > 0) {
+                  await new Promise((resolve) => setTimeout(resolve, delay));
+                }
+                let response;
+                try {
+                  response = await fetch(`https://registry.npmjs.org/${name}`);
+                } catch (error) {
+                  lastError = error;
+                  continue;
+                }
+                if (response.status === 404) return null;
+                if (response.ok) return await response.json();
+                if (response.status !== 429 && response.status < 500) {
+                  throw new Error(`${name}: HTTP ${response.status}`);
+                }
+                lastError = new Error(`${name}: HTTP ${response.status}`);
+              }
+              throw lastError ?? new Error(`${name}: registry lookup failed`);
+            };
+            const compare = (left, right) => {
+              const a = parse(left);
+              const b = parse(right);
+              for (let index = 0; index < 3; index += 1) {
+                if (a.core[index] !== b.core[index]) {
+                  return a.core[index] < b.core[index] ? -1 : 1;
+                }
+              }
+              if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+                return Number(a.prerelease.length === 0) - Number(b.prerelease.length === 0);
+              }
+              const length = Math.max(a.prerelease.length, b.prerelease.length);
+              for (let index = 0; index < length; index += 1) {
+                const leftPart = a.prerelease[index];
+                const rightPart = b.prerelease[index];
+                if (leftPart === undefined) return -1;
+                if (rightPart === undefined) return 1;
+                if (leftPart === rightPart) continue;
+                const leftNumeric = /^\d+$/.test(leftPart);
+                const rightNumeric = /^\d+$/.test(rightPart);
+                if (leftNumeric && rightNumeric) {
+                  return BigInt(leftPart) < BigInt(rightPart) ? -1 : 1;
+                }
+                if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+                return leftPart < rightPart ? -1 : 1;
+              }
+              return 0;
+            };
+            for (const name of names) {
+              const metadata = await packageMetadata(name);
+              if (metadata === null) continue;
+              const current = metadata["dist-tags"]?.[tag];
+              if (current === undefined || current === candidate) continue;
+              if (compare(candidate, current) <= 0) {
+                throw new Error(`${name}: ${tag} already points to ${current}`);
+              }
+            }
+          ' "${RELEASE_TAG#v}" "$DIST_TAG"
+
+      - name: Publish exact release artifacts
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          registry_integrity() {
+            local name="$1"
+            local version="$2"
+            local metadata="$RUNNER_TEMP/npm-metadata.json"
+            local status
+            for delay in 0 1 2 4; do
+              if (( delay > 0 )); then sleep "$delay"; fi
+              if status="$(curl --silent --show-error \
+                --output "$metadata" \
+                --write-out '%{http_code}' \
+                "https://registry.npmjs.org/$name/$version")"; then
+                case "$status" in
+                  200) jq -er '.dist.integrity' "$metadata"; return ;;
+                  404) printf '%s\n' MISSING; return ;;
+                  429|5??) ;;
+                  *) printf 'Registry lookup failed for %s@%s: HTTP %s\n' \
+                       "$name" "$version" "$status" >&2; return 1 ;;
+                esac
+              fi
+            done
+            printf 'Registry lookup failed after retries for %s@%s\n' \
+              "$name" "$version" >&2
+            return 1
+          }
+
+          registry_dist_tag() {
+            local name="$1"
+            local dist_tag="$2"
+            local metadata="$RUNNER_TEMP/npm-package-metadata.json"
+            local status
+            for delay in 0 1 2 4; do
+              if (( delay > 0 )); then sleep "$delay"; fi
+              if status="$(curl --silent --show-error \
+                --output "$metadata" \
+                --write-out '%{http_code}' \
+                "https://registry.npmjs.org/$name")"; then
+                case "$status" in
+                  200) jq -r --arg tag "$dist_tag" \
+                         '."dist-tags"[$tag] // "MISSING"' "$metadata"; return ;;
+                  404) printf '%s\n' MISSING; return ;;
+                  429|5??) ;;
+                  *) printf 'Registry lookup failed for %s: HTTP %s\n' \
+                       "$name" "$status" >&2; return 1 ;;
+                esac
+              fi
+            done
+            printf 'Registry lookup failed after retries for %s\n' "$name" >&2
+            return 1
+          }
+
+          verify_provenance() {
+            local name="$1"
+            local version="$2"
+            local expected_sha512="$3"
+            local metadata="$RUNNER_TEMP/npm-provenance-metadata.json"
+            local attestations="$RUNNER_TEMP/npm-attestations.json"
+            local statement="$RUNNER_TEMP/npm-provenance-statement.json"
+            local url
+            for delay in 0 1 2 4 8 16; do
+              if (( delay > 0 )); then sleep "$delay"; fi
+              if ! curl --fail --silent --show-error \
+                "https://registry.npmjs.org/$name/$version" \
+                --output "$metadata"; then
+                continue
+              fi
+              url="$(jq -r '
+                select(.dist.attestations.provenance.predicateType ==
+                  "https://slsa.dev/provenance/v1") |
+                .dist.attestations.url // empty
+              ' "$metadata")"
+              if [[ -z "$url" ]] || ! curl --fail --silent --show-error \
+                "$url" --output "$attestations"; then
+                continue
+              fi
+              if ! jq -er '
+                .attestations[] |
+                select(.predicateType == "https://slsa.dev/provenance/v1") |
+                .bundle.dsseEnvelope.payload
+              ' "$attestations" | base64 --decode >"$statement"; then
+                continue
+              fi
+              jq -e \
+                --arg commit "$EXPECTED_COMMIT" \
+                --arg ref "refs/tags/$RELEASE_TAG" \
+                --arg repository "https://github.com/disusered/okf-toolkit" \
+                --arg sha512 "$expected_sha512" \
+                --arg subject "pkg:npm/$name@$version" '
+                  .predicateType == "https://slsa.dev/provenance/v1" and
+                  any(.subject[];
+                    .name == $subject and .digest.sha512 == $sha512) and
+                  .predicate.buildDefinition.externalParameters.workflow.repository ==
+                    $repository and
+                  .predicate.buildDefinition.externalParameters.workflow.path ==
+                    ".github/workflows/release.yml" and
+                  .predicate.buildDefinition.externalParameters.workflow.ref == $ref and
+                  any(.predicate.buildDefinition.resolvedDependencies[];
+                    .uri == ("git+" + $repository + "@" + $ref) and
+                    .digest.gitCommit == $commit) and
+                  .predicate.runDetails.builder.id ==
+                    "https://github.com/actions/runner/github-hosted"
+                ' "$statement" && return
+            done
+            printf 'npm did not return matching GitHub provenance for %s@%s\n' \
+              "$name" "$version" >&2
+            return 1
+          }
+
+          version="${RELEASE_TAG#v}"
+          packages=(
+            okf-contracts
+            okf-core
+            okf-viz
+            okf-node
+            okf-signatures
+            okf-cloudflare
+            okf-cli
+          )
+          for name in "${packages[@]}"; do
+            filename="$name-$version.tgz"
+            tarball="$RELEASE_DIRECTORY/$filename"
+            awk -v filename="$filename" '$2 == filename { found = 1 } END { exit !found }' \
+              "$RELEASE_DIRECTORY/SHA256SUMS"
+            packed_manifest="$(tar -xOf "$tarball" package/package.json)"
+            jq -e \
+              --arg name "$name" \
+              --arg repository "git+https://github.com/disusered/okf-toolkit.git" \
+              --arg version "$version" '
+                .name == $name and
+                .version == $version and
+                .publishConfig.access == "public" and
+                .repository.url == $repository and
+                ([.. | strings | select(startswith("workspace:"))] | length) == 0
+              ' <<<"$packed_manifest"
+            expected="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
+            expected_sha512="$(sha512sum "$tarball" | cut -d' ' -f1)"
+
+            current="$(registry_integrity "$name" "$version")"
+            current_tag="$(registry_dist_tag "$name" "$DIST_TAG")"
+            if [[ "$current" == "$expected" ]]; then
+              if [[ "$current_tag" != "$version" ]]; then
+                printf '%s@%s matches, but %s points to %s\n' \
+                  "$name" "$version" "$DIST_TAG" "$current_tag" >&2
+                exit 1
+              fi
+              printf '%s@%s and %s already match; skipping\n' \
+                "$name" "$version" "$DIST_TAG"
+              verify_provenance "$name" "$version" "$expected_sha512"
+              continue
+            fi
+            if [[ "$current" != MISSING ]]; then
+              printf 'Registry integrity mismatch for %s@%s\n' "$name" "$version" >&2
+              exit 1
+            fi
+
+            npm publish "$tarball" \
+              --access public \
+              --ignore-scripts \
+              --provenance \
+              --tag "$DIST_TAG"
+
+            matched=false
+            for delay in 0 1 2 4 8 16; do
+              if (( delay > 0 )); then sleep "$delay"; fi
+              current="$(registry_integrity "$name" "$version")"
+              current_tag="$(registry_dist_tag "$name" "$DIST_TAG")"
+              if [[ "$current" == "$expected" && "$current_tag" == "$version" ]]; then
+                matched=true
+                break
+              fi
+              if [[ "$current" != MISSING && "$current" != "$expected" ]]; then
+                printf 'Published integrity mismatch for %s@%s\n' \
+                  "$name" "$version" >&2
+                exit 1
+              fi
+            done
+            if [[ "$matched" != true ]]; then
+              printf 'npm did not return %s@%s after publication\n' \
+                "$name" "$version" >&2
+              exit 1
+            fi
+            verify_provenance "$name" "$version" "$expected_sha512"
+          done
+
+  release-assets:
+    needs: [build, publish]
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASE_DIRECTORY: ${{ runner.temp }}/okf-release
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: okf-toolkit-${{ github.event.release.tag_name }}
+          path: ${{ runner.temp }}/okf-release
+
+      - name: Upload matching release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
+          release="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")"
+
+          version="${RELEASE_TAG#v}"
+          assets=(
+            okf-contracts-$version.tgz
+            okf-core-$version.tgz
+            okf-viz-$version.tgz
+            okf-node-$version.tgz
+            okf-signatures-$version.tgz
+            okf-cloudflare-$version.tgz
+            okf-cli-$version.tgz
+            SHA256SUMS
+            RELEASE.json
+          )
+          for name in "${assets[@]}"; do
+            asset="$RELEASE_DIRECTORY/$name"
+            [[ -f "$asset" ]]
+            expected="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
+            existing="$(jq -r --arg name "$name" \
+              '.assets[] | select(.name == $name) | .digest' <<<"$release")"
+            if [[ -z "$existing" ]]; then
+              gh release upload "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY"
+            elif [[ "$existing" == "$expected" ]]; then
+              printf '%s already matches; skipping\n' "$name"
+            else
+              printf 'Release asset digest mismatch for %s\n' "$name" >&2
+              exit 1
+            fi
+          done
