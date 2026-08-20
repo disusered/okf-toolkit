@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      RELEASE_DIRECTORY: ${{ runner.temp }}/okf-release
+      RELEASE_DIRECTORY: /tmp/okf-release
       RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,7 +90,7 @@ jobs:
     timeout-minutes: 15
     env:
       DIST_TAG: ${{ github.event.release.prerelease && 'next' || 'latest' }}
-      RELEASE_DIRECTORY: ${{ runner.temp }}/okf-release
+      RELEASE_DIRECTORY: /tmp/okf-release
       RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - name: Verify release environment configuration
@@ -129,6 +129,8 @@ jobs:
 
       - name: Reject an older distribution-tag version
         run: |
+          # The single quotes keep JavaScript template expressions out of the shell.
+          # shellcheck disable=SC2016
           node --input-type=module --eval '
             const names = [
               "okf-contracts", "okf-core", "okf-viz", "okf-node",
@@ -405,7 +407,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      RELEASE_DIRECTORY: ${{ runner.temp }}/okf-release
+      RELEASE_DIRECTORY: /tmp/okf-release
       RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -423,13 +425,13 @@ jobs:
 
           version="${RELEASE_TAG#v}"
           assets=(
-            okf-contracts-$version.tgz
-            okf-core-$version.tgz
-            okf-viz-$version.tgz
-            okf-node-$version.tgz
-            okf-signatures-$version.tgz
-            okf-cloudflare-$version.tgz
-            okf-cli-$version.tgz
+            "okf-contracts-$version.tgz"
+            "okf-core-$version.tgz"
+            "okf-viz-$version.tgz"
+            "okf-node-$version.tgz"
+            "okf-signatures-$version.tgz"
+            "okf-cloudflare-$version.tgz"
+            "okf-cli-$version.tgz"
             SHA256SUMS
             RELEASE.json
           )
