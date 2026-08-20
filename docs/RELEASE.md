@@ -53,9 +53,9 @@ For the tagged commit, the workflow:
 
 1. The build job checks out the tagged commit and verifies the signed tag,
    version agreement, package metadata, and release plan. It installs the frozen
-   lockfile, runs `pnpm check`, packs once, checks each tarball, and performs an
-   offline installation from the packed artifacts. It uploads the complete
-   release directory as one immutable Actions artifact.
+   lockfile, runs `pnpm check`, packs once, checks each tarball, and installs all
+   seven OKF packages from the packed artifacts in a clean project. It uploads
+   the complete release directory as one immutable Actions artifact.
 2. The npm publication job downloads and verifies that artifact without checking
    out repository code. After the `npm-release` environment approves the job, it
    publishes the exact tarballs with `--provenance --ignore-scripts --access

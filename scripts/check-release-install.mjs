@@ -52,7 +52,7 @@ try {
     )}\n`,
   );
 
-  run("pnpm", ["install", "--offline", "--ignore-scripts"], installation);
+  run("pnpm", ["install", "--prefer-offline", "--ignore-scripts"], installation);
   run(
     process.execPath,
     [
