@@ -1,0 +1,51 @@
+{
+  "name": "reserved Markdown structure uses parsed headings",
+  "documents": [
+    {
+      "path": "index.md",
+      "content": "---\n{}\n---\n# Root index without a declared version\n"
+    },
+    {
+      "path": "fenced/index.md",
+      "content": "```markdown\n# This is code, not an index heading\n```\n"
+    },
+    {
+      "path": "fenced/log.md",
+      "content": "# Update log\n\n## 2026-08-20\n\n- Valid entry.\n\n```markdown\n## Not a date heading\n```\n"
+    },
+    {
+      "path": "empty-group/log.md",
+      "content": "# Update log\n\n## 2026-08-20\n\nThis paragraph is not a flat list entry.\n\n```markdown\n- This fenced list does not count.\n```\n"
+    },
+    {
+      "path": "missing-date/log.md",
+      "content": "# Update log\n\n```markdown\n## 2026-08-20\n```\n"
+    },
+    {
+      "path": "out-of-order/log.md",
+      "content": "# Update log\n\n## 2026-08-01\n\n- Older entry.\n\n## 2026-08-20\n\n- Newer entry in the wrong position.\n"
+    }
+  ],
+  "expected": {
+    "core": [
+      {
+        "path": "empty-group/log.md",
+        "code": "core.log.date-group.list"
+      },
+      {
+        "path": "fenced/index.md",
+        "code": "core.index.heading.missing"
+      },
+      {
+        "path": "missing-date/log.md",
+        "code": "core.log.date-group.missing"
+      },
+      {
+        "path": "out-of-order/log.md",
+        "code": "core.log.heading.order"
+      }
+    ],
+    "guidance": [],
+    "profile": []
+  }
+}

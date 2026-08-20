@@ -1,0 +1,8 @@
+This package includes the Open Knowledge Format v0.2 specification.
+
+Copyright 2026 Google LLC
+Licensed under the Apache License, Version 2.0.
+
+Source: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/3fcbb9f828c2f23d109c855ee403c3a4c81f3a96/okf/SPEC.md
+The specification is included verbatim in spec/SPEC.md. Its license is in
+spec/LICENSE-APACHE-2.0.txt.

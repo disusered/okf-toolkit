@@ -1,0 +1,41 @@
+{
+  "name": "core conformance failures",
+  "documents": [
+    {
+      "path": "index.md",
+      "content": "---\nokf_version: \"0.2\"\ntitle: Forbidden\n---\nNo heading here.\n"
+    },
+    {
+      "path": "log.md",
+      "content": "---\ntype: Log\n---\n# Changes\n\n## August 20\n\n- Changed something.\n"
+    },
+    {
+      "path": "missing-frontmatter.md",
+      "content": "# Missing frontmatter\n"
+    },
+    {
+      "path": "bad-yaml.md",
+      "content": "---\ntype: [broken\n---\n# Broken\n"
+    },
+    {
+      "path": "missing-type.md",
+      "content": "---\ntitle: Missing type\n---\n# Missing type\n"
+    },
+    {
+      "path": "nested/index.md",
+      "content": "---\nokf_version: \"0.2\"\n---\n# Nested\n"
+    }
+  ],
+  "expected": {
+    "coreCodes": [
+      "core.concept.frontmatter.invalid-yaml",
+      "core.concept.frontmatter.missing",
+      "core.concept.type.missing",
+      "core.index.frontmatter.keys",
+      "core.index.frontmatter.nested",
+      "core.index.heading.missing",
+      "core.log.frontmatter.forbidden",
+      "core.log.heading.date"
+    ]
+  }
+}

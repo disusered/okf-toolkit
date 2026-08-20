@@ -1,0 +1,24 @@
+{
+  "name": "soft v0.2 guidance and tolerated broken links",
+  "today": "2026-08-20",
+  "documents": [
+    {
+      "path": "concept.md",
+      "content": "---\ntype: Unknown Consumer Type\nstatus: abandoned\ntags: release\ngenerated: { at: yesterday }\nverified: false\nstale_after: someday\nsources:\n  - title: Missing resource\n---\n# Concept\n\n[Broken](missing.md) [Escape](../outside.md)\n"
+    }
+  ],
+  "expected": {
+    "coreCodes": [],
+      "guidanceCodes": [
+      "guidance.generated.at",
+      "guidance.generated.by",
+      "guidance.link.broken",
+      "guidance.link.escape",
+      "guidance.source.resource",
+      "guidance.stale-after.date",
+      "guidance.status.value",
+      "guidance.tags.type",
+      "guidance.verified.type"
+    ]
+  }
+}

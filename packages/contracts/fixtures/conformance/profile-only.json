@@ -1,0 +1,42 @@
+{
+  "name": "consumer findings remain isolated from portable conformance",
+  "documents": [
+    {
+      "path": "page.md",
+      "content": "---\ntype: Note\nstatus: draft\n---\n# Page\n"
+    }
+  ],
+  "profile": {
+    "id": "fixture/stable-only",
+    "diagnostics": [
+      {
+        "code": "stable-only.status",
+        "severity": "warning",
+        "path": "page.md",
+        "message": "consumer requires stable concepts",
+        "range": {
+          "start": { "line": 2, "column": 1, "offset": 4 },
+          "end": { "line": 2, "column": 11, "offset": 14 }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "core": [],
+    "guidance": [],
+    "profile": [
+      {
+        "code": "stable-only.status",
+        "family": "profile",
+        "severity": "warning",
+        "path": "page.md",
+        "message": "consumer requires stable concepts",
+        "range": {
+          "start": { "line": 2, "column": 1, "offset": 4 },
+          "end": { "line": 2, "column": 11, "offset": 14 }
+        },
+        "profile": "fixture/stable-only"
+      }
+    ]
+  }
+}

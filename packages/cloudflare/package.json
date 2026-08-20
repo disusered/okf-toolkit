@@ -1,0 +1,39 @@
+{
+  "name": "okf-cloudflare",
+  "version": "1.0.0-rc.0",
+  "description": "One-bundle R2, MCP, and queue composition for OKF",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/cloudflare" },
+  "homepage": "https://github.com/disusered/okf-toolkit#readme",
+  "bugs": { "url": "https://github.com/disusered/okf-toolkit/issues" },
+  "publishConfig": { "access": "public" },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "okf-contracts": "workspace:*",
+    "okf-core": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "okf-node": "workspace:*"
+  }
+}

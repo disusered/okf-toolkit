@@ -1,0 +1,35 @@
+{
+  "name": "deterministic trust timestamp and actor guidance",
+  "documents": [
+    {
+      "path": "compatible.md",
+      "content": "---\ntype: Note\ngenerated: { by: openai/gpt-5, at: 2026-08-20 }\nverified: { by: human:carlos, at: 2026-08-20 }\n---\n# Compatible\n"
+    },
+    {
+      "path": "invalid.md",
+      "content": "---\ntype: Note\ngenerated: { by: \"human:carlos/extra\", at: \"2026-08-20T12:00:00\" }\nverified: { by: codex, at: 2026-02-30 }\n---\n# Invalid\n"
+    }
+  ],
+  "expected": {
+    "core": [],
+    "guidance": [
+      {
+        "path": "invalid.md",
+        "code": "guidance.generated.at"
+      },
+      {
+        "path": "invalid.md",
+        "code": "guidance.generated.by"
+      },
+      {
+        "path": "invalid.md",
+        "code": "guidance.verified.at"
+      },
+      {
+        "path": "invalid.md",
+        "code": "guidance.verified.by"
+      }
+    ],
+    "profile": []
+  }
+}

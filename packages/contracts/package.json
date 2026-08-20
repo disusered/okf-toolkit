@@ -1,0 +1,36 @@
+{
+  "name": "okf-contracts",
+  "version": "1.0.0-rc.0",
+  "description": "Versioned wire contracts, schemas, and conformance fixtures for OKF Toolkit",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/contracts" },
+  "homepage": "https://github.com/disusered/okf-toolkit#readme",
+  "bugs": { "url": "https://github.com/disusered/okf-toolkit/issues" },
+  "publishConfig": { "access": "public" },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "files": [
+    "dist",
+    "fixtures",
+    "schemas",
+    "spec",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schemas/*": "./schemas/*",
+    "./fixtures/*": "./fixtures/*",
+    "./spec/*": "./spec/*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json"
+  }
+}

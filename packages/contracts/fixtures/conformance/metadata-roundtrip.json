@@ -1,0 +1,41 @@
+{
+  "name": "unknown JSON-safe YAML metadata and rejected non-JSON values",
+  "documents": [
+    {
+      "path": "metadata.md",
+      "content": "---\ntype: Note\nx-extension:\n  enabled: true\n  nested: &shared\n    labels: [alpha, beta]\ncopy: *shared\n\"__proto__\":\n  safe: true\n---\n# Metadata\n"
+    },
+    {
+      "path": "cyclic.md",
+      "content": "---\ntype: Note\nloop: &loop\n  self: *loop\n---\n# Cyclic\n"
+    },
+    {
+      "path": "nonfinite.md",
+      "content": "---\ntype: Note\namount: !!float .nan\n---\n# Non-finite\n"
+    }
+  ],
+  "expected": {
+    "path": "metadata.md",
+    "metadata": {
+      "type": "Note",
+      "x-extension": {
+        "enabled": true,
+        "nested": { "labels": ["alpha", "beta"] }
+      },
+      "copy": { "labels": ["alpha", "beta"] },
+      "__proto__": { "safe": true }
+    },
+    "core": [
+      {
+        "path": "cyclic.md",
+        "code": "core.concept.frontmatter.non-json"
+      },
+      {
+        "path": "nonfinite.md",
+        "code": "core.concept.frontmatter.non-json"
+      }
+    ],
+    "guidance": [],
+    "profile": []
+  }
+}

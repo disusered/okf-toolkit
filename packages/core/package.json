@@ -1,0 +1,32 @@
+{
+  "name": "okf-core",
+  "version": "1.0.0-rc.0",
+  "description": "Canonical parser, validator, link resolver, graph, and search engine for OKF v0.2",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/core" },
+  "homepage": "https://github.com/disusered/okf-toolkit#readme",
+  "bugs": { "url": "https://github.com/disusered/okf-toolkit/issues" },
+  "publishConfig": { "access": "public" },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "mdast-util-from-markdown": "^2.0.2",
+    "okf-contracts": "workspace:*",
+    "yaml": "^2.9.0"
+  }
+}

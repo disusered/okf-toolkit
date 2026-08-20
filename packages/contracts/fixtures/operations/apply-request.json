@@ -1,0 +1,86 @@
+{
+  "schema": "okf.operations.v1",
+  "valid": [
+    {
+      "change": {
+        "operation": "create",
+        "path": "concepts/Café.md",
+        "content": "---\ntype: Note\n---\n# New page\n"
+      },
+      "preview_id": "sha256:f2a2084c80a19e29cc0e82a162a52363da615fd350afae5cb437587d2b57e66b"
+    },
+    {
+      "change": {
+        "operation": "update",
+        "path": "concepts/page.md",
+        "content": "---\ntype: Note\n---\n# Updated page\n",
+        "expected_revision": "opaque-revision-1"
+      },
+      "preview_id": "sha256:34d88fbb989098faf9dea06fd41e9524643aad545cc0a0e862943feae7815ee2"
+    }
+  ],
+  "digest_vectors": [
+    {
+      "name": "create preserves decomposed Unicode",
+      "change": {
+        "operation": "create",
+        "path": "concepts/Café.md",
+        "content": "---\ntype: Note\n---\n# New page\n"
+      },
+      "canonical_json": "{\"content\":\"---\\ntype: Note\\n---\\n# New page\\n\",\"operation\":\"create\",\"path\":\"concepts/Café.md\"}",
+      "preview_id": "sha256:f2a2084c80a19e29cc0e82a162a52363da615fd350afae5cb437587d2b57e66b"
+    },
+    {
+      "name": "update",
+      "change": {
+        "operation": "update",
+        "path": "concepts/page.md",
+        "content": "---\ntype: Note\n---\n# Updated page\n",
+        "expected_revision": "opaque-revision-1"
+      },
+      "canonical_json": "{\"content\":\"---\\ntype: Note\\n---\\n# Updated page\\n\",\"expected_revision\":\"opaque-revision-1\",\"operation\":\"update\",\"path\":\"concepts/page.md\"}",
+      "preview_id": "sha256:34d88fbb989098faf9dea06fd41e9524643aad545cc0a0e862943feae7815ee2"
+    },
+    {
+      "name": "delete",
+      "change": {
+        "operation": "delete",
+        "path": "concepts/page.md",
+        "expected_revision": "opaque-revision-2"
+      },
+      "canonical_json": "{\"expected_revision\":\"opaque-revision-2\",\"operation\":\"delete\",\"path\":\"concepts/page.md\"}",
+      "preview_id": "sha256:994ae93cadc478f72861cfb1d8aac5369d6cd66cb10e5186623ee80faa3beba8"
+    },
+    {
+      "name": "move",
+      "change": {
+        "operation": "move",
+        "from_path": "concepts/page.md",
+        "to_path": "archive/page.md",
+        "expected_revision": "opaque-revision-3"
+      },
+      "canonical_json": "{\"expected_revision\":\"opaque-revision-3\",\"from_path\":\"concepts/page.md\",\"operation\":\"move\",\"to_path\":\"archive/page.md\"}",
+      "preview_id": "sha256:a1b2b0c8f27d1cacabdb40df5a5aed5ad5f9a96c8292cb430842159361c1afe4"
+    }
+  ],
+  "invalid": [
+    {
+      "change": {
+        "operation": "delete",
+        "path": "concepts/page.md",
+        "expected_revision": "opaque-revision-1"
+      }
+    },
+    {
+      "change": {
+        "operation": "move",
+        "from_path": "concepts/page.md",
+        "to_path": "concepts/moved.md",
+        "expected_revision": "opaque-revision-1",
+        "unexpected": true
+      },
+      "preview_id": "sha256:reviewed",
+      "unexpected": true
+    }
+  ]
+}

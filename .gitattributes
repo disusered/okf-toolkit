@@ -1,0 +1,5 @@
+# These files are vendored or reproduced verbatim for licensing and conformance.
+LICENSE -whitespace
+packages/**/LICENSE -whitespace
+packages/contracts/spec/LICENSE-APACHE-2.0.txt -whitespace
+packages/contracts/spec/SPEC.md -whitespace

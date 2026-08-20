@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://okf.md/schemas/okf.operations.v1.schema.json",
+  "title": "OKF single-document operations v1",
+  "oneOf": [
+    { "$ref": "#/$defs/create" },
+    { "$ref": "#/$defs/update" },
+    { "$ref": "#/$defs/delete" },
+    { "$ref": "#/$defs/move" },
+    { "$ref": "#/$defs/applyRequest" },
+    { "$ref": "#/$defs/preview" },
+    { "$ref": "#/$defs/result" }
+  ],
+  "$defs": {
+    "create": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "path", "content"],
+      "properties": {
+        "operation": { "const": "create" },
+        "path": { "$ref": "#/$defs/path" },
+        "content": { "type": "string" }
+      }
+    },
+    "update": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "path", "content", "expected_revision"],
+      "properties": {
+        "operation": { "const": "update" },
+        "path": { "$ref": "#/$defs/path" },
+        "content": { "type": "string" },
+        "expected_revision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "delete": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "path", "expected_revision"],
+      "properties": {
+        "operation": { "const": "delete" },
+        "path": { "$ref": "#/$defs/path" },
+        "expected_revision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "move": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "from_path", "to_path", "expected_revision"],
+      "properties": {
+        "operation": { "const": "move" },
+        "from_path": { "$ref": "#/$defs/path" },
+        "to_path": { "$ref": "#/$defs/path" },
+        "expected_revision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "change": {
+      "oneOf": [
+        { "$ref": "#/$defs/create" },
+        { "$ref": "#/$defs/update" },
+        { "$ref": "#/$defs/delete" },
+        { "$ref": "#/$defs/move" }
+      ]
+    },
+    "applyRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["change", "preview_id"],
+      "properties": {
+        "change": { "$ref": "#/$defs/change" },
+        "preview_id": { "$ref": "#/$defs/previewId" }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "passed", "preview_id", "operation", "affected_paths", "diff", "diagnostics"],
+      "properties": {
+        "schema": { "const": "okf.operations.v1" },
+        "passed": { "type": "boolean" },
+        "preview_id": { "$ref": "#/$defs/previewId" },
+        "operation": { "enum": ["create", "update", "delete", "move"] },
+        "affected_paths": { "type": "array", "items": { "$ref": "#/$defs/path" } },
+        "diff": { "type": "string" },
+        "diagnostics": {
+          "type": "array",
+          "items": { "$ref": "okf.inspect.v1.schema.json#/$defs/diagnostic" }
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "outcome", "operation", "revisions", "diagnostics"],
+      "properties": {
+        "schema": { "const": "okf.operations.v1" },
+        "outcome": { "enum": ["applied", "unchanged", "rejected"] },
+        "operation": { "enum": ["create", "update", "delete", "move"] },
+        "revisions": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "null"] }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": { "$ref": "okf.inspect.v1.schema.json#/$defs/diagnostic" }
+        }
+      }
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*\\u0000)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//).+\\.md$"
+    },
+    "revision": { "type": "string", "minLength": 1 },
+    "previewId": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

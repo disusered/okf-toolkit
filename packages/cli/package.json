@@ -1,0 +1,42 @@
+{
+  "name": "okf-cli",
+  "version": "1.0.0-rc.0",
+  "description": "Deterministic JSON command-line interface for one OKF bundle at a time",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/cli" },
+  "homepage": "https://github.com/disusered/okf-toolkit#readme",
+  "bugs": { "url": "https://github.com/disusered/okf-toolkit/issues" },
+  "publishConfig": { "access": "public" },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "bin": {
+    "okf": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js"
+  },
+  "dependencies": {
+    "okf-contracts": "workspace:*",
+    "okf-core": "workspace:*",
+    "okf-node": "workspace:*",
+    "okf-viz": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2"
+  },
+  "license": "Apache-2.0"
+}

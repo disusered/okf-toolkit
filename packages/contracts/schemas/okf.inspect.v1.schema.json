@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://okf.md/schemas/okf.inspect.v1.schema.json",
+  "title": "OKF bundle analysis v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "okfVersion", "documents", "graph", "diagnostics", "summary"],
+  "properties": {
+    "schema": { "const": "okf.inspect.v1" },
+    "okfVersion": { "type": ["string", "null"] },
+    "documents": { "type": "array", "items": { "$ref": "#/$defs/document" } },
+    "graph": { "$ref": "#/$defs/graph" },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core", "guidance", "profile"],
+      "properties": {
+        "core": { "$ref": "#/$defs/diagnostics" },
+        "guidance": { "$ref": "#/$defs/diagnostics" },
+        "profile": { "$ref": "#/$defs/diagnostics" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "concepts", "indexes", "logs", "errors", "warnings"],
+      "properties": {
+        "documents": { "type": "integer", "minimum": 0 },
+        "concepts": { "type": "integer", "minimum": 0 },
+        "indexes": { "type": "integer", "minimum": 0 },
+        "logs": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "column", "offset"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/$defs/position" },
+        "end": { "$ref": "#/$defs/position" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["href", "text", "kind", "resolvedPath", "fragment", "exists", "range"],
+      "properties": {
+        "href": { "type": "string" },
+        "text": { "type": "string" },
+        "kind": { "enum": ["internal", "external", "fragment", "escape", "invalid"] },
+        "resolvedPath": { "type": ["string", "null"] },
+        "fragment": { "type": ["string", "null"] },
+        "exists": { "type": ["boolean", "null"] },
+        "range": { "anyOf": [{ "$ref": "#/$defs/range" }, { "type": "null" }] }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "resource", "title", "author", "usageCount", "lastModified", "resolvedPath", "exists"],
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "resource": { "type": "string" },
+        "title": { "type": ["string", "null"] },
+        "author": { "type": ["string", "null"] },
+        "usageCount": { "type": ["number", "null"] },
+        "lastModified": { "type": ["string", "null"] },
+        "resolvedPath": { "type": ["string", "null"] },
+        "exists": { "type": ["boolean", "null"] }
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "id", "kind", "revision", "content", "body", "bodyStartLine", "frontmatter", "metadata", "links", "derived"],
+      "properties": {
+        "path": { "type": "string" },
+        "id": { "type": ["string", "null"] },
+        "kind": { "enum": ["concept", "index", "log"] },
+        "revision": { "type": ["string", "null"] },
+        "content": { "type": "string" },
+        "body": { "type": "string" },
+        "bodyStartLine": { "type": "integer", "minimum": 1 },
+        "frontmatter": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["raw", "yaml", "metadata"],
+              "properties": {
+                "raw": { "type": "string" },
+                "yaml": { "type": "string" },
+                "metadata": {
+                  "type": "object",
+                  "description": "JSON-safe YAML projection. Unknown keys are retained; aliases are expanded by value."
+                }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "description": "JSON-safe YAML projection, or an empty object when frontmatter cannot cross the JSON boundary."
+        },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/link" } },
+        "derived": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "type", "description", "status", "trustTier", "stale", "staleAfter", "tags", "sources"],
+          "properties": {
+            "title": { "type": "string" },
+            "type": { "type": ["string", "null"] },
+            "description": { "type": ["string", "null"] },
+            "status": { "type": "string" },
+            "trustTier": { "enum": ["unverified", "machine-confirmed", "human-reviewed"] },
+            "stale": { "type": ["boolean", "null"] },
+            "staleAfter": { "type": ["string", "null"] },
+            "tags": { "type": "array", "items": { "type": "string" } },
+            "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } }
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "title", "type", "description", "status", "trustTier", "stale", "tags"],
+      "properties": {
+        "id": { "type": "string" },
+        "path": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "status": { "type": "string" },
+        "trustTier": { "enum": ["unverified", "machine-confirmed", "human-reviewed"] },
+        "stale": { "type": ["boolean", "null"] },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "target", "relation"],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "relation": { "enum": ["link", "source"] }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "family", "severity", "path", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "family": { "enum": ["core", "guidance", "profile"] },
+        "severity": { "enum": ["error", "warning", "info"] },
+        "path": { "type": "string" },
+        "message": { "type": "string" },
+        "range": { "$ref": "#/$defs/range" },
+        "profile": { "type": "string" }
+      }
+    },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }
+  }
+}
