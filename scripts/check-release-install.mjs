@@ -42,6 +42,7 @@ try {
       {
         dependencies,
         name: "okf-release-install-check",
+        packageManager: plan.packageManager,
         pnpm: { overrides },
         private: true,
         type: "module",

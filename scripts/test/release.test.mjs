@@ -5,6 +5,7 @@ import { loadReleasePlan, parseVersion } from "../release-config.mjs";
 test("release plan fixes package order and prerelease tag", async () => {
   const plan = await loadReleasePlan({ tag: "v1.0.0-rc.0" });
   assert.equal(plan.distTag, "next");
+  assert.equal(plan.packageManager, "pnpm@10.28.2");
   assert.equal(plan.prerelease, true);
   assert.deepEqual(
     plan.packages.map(({ name }) => name),

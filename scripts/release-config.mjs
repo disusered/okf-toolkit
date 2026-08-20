@@ -55,6 +55,9 @@ export async function loadReleasePlan({ tag } = {}) {
   if (packageRepositoryUrl(rootManifest) !== repositoryUrl) {
     throw new Error(`workspace repository must be ${repositoryUrl}`);
   }
+  if (!/^pnpm@[0-9]+\.[0-9]+\.[0-9]+$/.test(rootManifest.packageManager ?? "")) {
+    throw new Error("workspace must pin an exact pnpm package manager version");
+  }
 
   const expectedTag = `v${version}`;
   if (tag !== undefined && tag !== expectedTag) {
@@ -162,6 +165,7 @@ export async function loadReleasePlan({ tag } = {}) {
   return {
     distTag: parsedVersion.prerelease ? "next" : "latest",
     expectedTag,
+    packageManager: rootManifest.packageManager,
     packages: packages.map(({ dependencies: _, ...releasePackage }) =>
       releasePackage
     ),
