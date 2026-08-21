@@ -80,37 +80,35 @@ and requires a standard GitHub release.
 
 ## Configure npm trusted publishing
 
-After the packages exist on npm, each package must use the same GitHub Actions
-trusted-publisher settings:
+Configure each package by following the
+[npm trusted publishing guide](https://docs.npmjs.com/trusted-publishers). In
+the package settings on npmjs.com, select **Trusted Publisher**, choose
+**GitHub Actions**, and enter these values:
 
 - Organization or user: `disusered`
 - Repository: `okf-toolkit`
 - Workflow: `release.yml`
 - Environment: `npm-release`
-- Permission: allow publishing
+- Allowed action: `npm publish`
 
-The release workflow uses OpenID Connect (OIDC) for npm authentication. After
-bootstrap, the workflow does not use an npm token. Configure each package to
-disallow token-based publishing after you verify its trusted publisher.
+Repeat this configuration for all seven packages. npm accepts the workflow only
+when every value matches the GitHub repository and workflow. The release job
+runs on a GitHub-hosted runner with `id-token: write`, Node 24, and npm 11.5.1
+or later.
 
-## Bootstrap the packages on npm
+The release workflow uses OpenID Connect (OIDC) for npm authentication. It does
+not read an npm token from GitHub secrets or the workstation. npm generates a
+provenance attestation for each public package published from the public
+repository, and the workflow verifies that attestation before it completes.
 
-npm requires a package to exist before you can configure its trusted publisher.
-Use a temporary token only for the first publication of these package names:
+After you configure trusted publishing, open **Settings** > **Publishing
+access** for each package and select **Require two-factor authentication and
+disallow tokens**. The trusted publisher continues to work because it uses
+short-lived OIDC credentials instead of traditional npm tokens.
 
-1. Create a granular npm token that expires after one day, with read and write access to
-   **All Packages**, and bypass 2FA enabled.
-2. Store it as `NPM_BOOTSTRAP_TOKEN` only in the protected `npm-release` GitHub
-   environment.
-3. Push the first signed release tag, publish its matching GitHub release, and
-   approve the protected environment.
-4. Configure the settings in **Configure npm trusted publishing** for all seven
-   packages, with publishing allowed.
-5. Delete `NPM_BOOTSTRAP_TOKEN` from GitHub, revoke the npm token, and configure
-   each package to disallow token-based publishing.
-
-Do not store the bootstrap token in a local `.npmrc`, a repository-level secret,
-or a workflow file.
+Do not create an npm automation token for this workflow. Do not add
+`NODE_AUTH_TOKEN`, `NPM_TOKEN`, or another npm publish secret to the release
+job.
 
 ## Retry a partial release
 

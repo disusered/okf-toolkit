@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadReleasePlan, parseVersion } from "../release-config.mjs";
 
@@ -35,5 +36,21 @@ test("version parsing follows SemVer prerelease rules", () => {
   assert.throws(
     () => parseVersion("9007199254740992.0.0"),
     /not valid npm SemVer/,
+  );
+});
+
+test("release workflow uses OIDC without an npm publish token", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workflow, /id-token: write/);
+  assert.match(workflow, /runs-on: ubuntu-latest/);
+  assert.match(workflow, /node-version: 24/);
+  assert.match(workflow, /npm publish/);
+  assert.doesNotMatch(
+    workflow,
+    /NODE_AUTH_TOKEN|NPM_BOOTSTRAP_TOKEN|NPM_TOKEN/,
   );
 });

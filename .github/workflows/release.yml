@@ -212,7 +212,6 @@ jobs:
       - name: Publish exact release artifacts
         env:
           EXPECTED_COMMIT: ${{ github.sha }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: |
           set -euo pipefail
 
