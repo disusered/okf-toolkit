@@ -87,12 +87,14 @@ new package name, publish a minimal `0.0.0-bootstrap` package under the
 create an automation token or include toolkit code in the bootstrap package.
 
 npm assigns `latest` to the first version of a package even when the publish
-command specifies another tag. Remove that `latest` tag after publication so a
-default install cannot select the empty bootstrap package. Do not create a Git
-tag or GitHub release for the bootstrap version.
+command specifies another tag. npm requires every package to have a `latest`
+tag, so deprecate the bootstrap version to warn anyone who installs it. The
+first stable release replaces `latest`; a release candidate uses `next`. Do not
+create a Git tag or GitHub release for the bootstrap version.
 
 ```bash
-npm dist-tag rm PACKAGE_NAME latest
+npm deprecate PACKAGE_NAME@0.0.0-bootstrap \
+  "Bootstrap placeholder. Install an exact release or use the next tag."
 ```
 
 ## Configure npm trusted publishing
