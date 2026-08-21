@@ -1,6 +1,6 @@
 {
   "name": "okf-core",
-  "version": "1.0.0-rc.0",
+  "version": "1.0.0-rc.1",
   "description": "Canonical parser, validator, link resolver, graph, and search engine for OKF v0.2",
   "type": "module",
   "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/core" },

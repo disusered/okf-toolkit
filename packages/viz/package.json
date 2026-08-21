@@ -1,6 +1,6 @@
 {
   "name": "okf-viz",
-  "version": "1.0.0-rc.0",
+  "version": "1.0.0-rc.1",
   "description": "Deterministic, self-contained HTML visualization for an analyzed OKF bundle",
   "type": "module",
   "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/viz" },

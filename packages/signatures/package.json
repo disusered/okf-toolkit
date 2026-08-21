@@ -1,6 +1,6 @@
 {
   "name": "okf-signatures",
-  "version": "1.0.0-rc.0",
+  "version": "1.0.0-rc.1",
   "description": "Optional Ed25519 integrity manifests for OKF bundles",
   "type": "module",
   "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/signatures" },
