@@ -17,24 +17,24 @@ that all release checks pass:
 ```bash
 pnpm install --frozen-lockfile
 pnpm check
-node scripts/verify-release.mjs --tag v1.0.0-rc.0
+node scripts/verify-release.mjs --tag v1.0.0-rc.1
 ```
 
 Create, verify, and push the signed tag:
 
 ```bash
-git tag -s v1.0.0-rc.0 -m "Release v1.0.0-rc.0"
-git verify-tag v1.0.0-rc.0
-git push origin v1.0.0-rc.0
+git tag -s v1.0.0-rc.1 -m "Release v1.0.0-rc.1"
+git verify-tag v1.0.0-rc.1
+git push origin v1.0.0-rc.1
 ```
 
 Do not move a release tag after you push it. Create the matching GitHub
 prerelease only after the tag is available on GitHub:
 
 ```bash
-gh release create v1.0.0-rc.0 \
+gh release create v1.0.0-rc.1 \
   --verify-tag \
-  --title v1.0.0-rc.0 \
+  --title v1.0.0-rc.1 \
   --generate-notes \
   --prerelease
 ```
@@ -75,7 +75,7 @@ The dependency order is:
 6. `okf-cloudflare`
 7. `@disusered/okf-cli`
 
-A SemVer prerelease such as `1.0.0-rc.0` uses the npm `next` distribution tag
+A SemVer prerelease such as `1.0.0-rc.1` uses the npm `next` distribution tag
 and requires a GitHub prerelease. A stable version such as `1.0.0` uses `latest`
 and requires a standard GitHub release.
 

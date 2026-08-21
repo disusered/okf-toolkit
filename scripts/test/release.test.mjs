@@ -4,7 +4,7 @@ import test from "node:test";
 import { loadReleasePlan, parseVersion } from "../release-config.mjs";
 
 test("release plan fixes package order and prerelease tag", async () => {
-  const plan = await loadReleasePlan({ tag: "v1.0.0-rc.0" });
+  const plan = await loadReleasePlan({ tag: "v1.0.0-rc.1" });
   assert.equal(plan.distTag, "next");
   assert.equal(plan.packageManager, "pnpm@10.28.2");
   assert.equal(plan.prerelease, true);
@@ -22,14 +22,14 @@ test("release plan fixes package order and prerelease tag", async () => {
   );
   assert.equal(
     plan.packages.at(-1)?.filename,
-    "disusered-okf-cli-1.0.0-rc.0.tgz",
+    "disusered-okf-cli-1.0.0-rc.1.tgz",
   );
 });
 
 test("release plan rejects a tag that does not match the package version", async () => {
   await assert.rejects(
     loadReleasePlan({ tag: "v1.0.0" }),
-    /release tag must be v1\.0\.0-rc\.0/,
+    /release tag must be v1\.0\.0-rc\.1/,
   );
 });
 
@@ -53,6 +53,8 @@ test("release workflow uses OIDC without an npm publish token", async () => {
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /node-version: 24/);
   assert.match(workflow, /npm publish/);
+  assert.match(workflow, /path: \$\{\{ env\.RELEASE_DIRECTORY \}\}/);
+  assert.doesNotMatch(workflow, /runner\.temp.*okf-release/);
   assert.doesNotMatch(
     workflow,
     /NODE_AUTH_TOKEN|NPM_BOOTSTRAP_TOKEN|NPM_TOKEN/,

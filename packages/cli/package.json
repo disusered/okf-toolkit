@@ -1,6 +1,6 @@
 {
   "name": "@disusered/okf-cli",
-  "version": "1.0.0-rc.0",
+  "version": "1.0.0-rc.1",
   "description": "Deterministic JSON command-line interface for one OKF bundle at a time",
   "type": "module",
   "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/cli" },
