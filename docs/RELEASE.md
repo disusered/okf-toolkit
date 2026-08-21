@@ -159,6 +159,13 @@ artifact. Do not create a replacement release or tag, and do not increment the
 version only to retry the workflow. The build artifact expires after seven
 days, so resolve a partial publication before that deadline.
 
+npm can accept a package and return success before that version is available
+through every registry endpoint. The workflow allows just over two minutes for
+the version and distribution tag to appear, then the same time for provenance.
+A retry also detects a distribution tag that already points to a version still
+being processed and waits instead of trying to publish that immutable version
+again.
+
 Before it skips an existing package version, the workflow compares the npm
 `dist.integrity` value with the integrity of the packed tarball. It stops if the
 values differ. If they match, it skips that package and continues in dependency

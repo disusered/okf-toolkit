@@ -53,6 +53,11 @@ test("release workflow uses OIDC without an npm publish token", async () => {
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /node-version: 24/);
   assert.match(workflow, /npm publish/);
+  assert.match(
+    workflow,
+    /registry_visibility_delays=\(0 1 2 4 8 16 32 64\)/,
+  );
+  assert.match(workflow, /npm is still processing/);
   assert.match(workflow, /path: \$\{\{ env\.RELEASE_DIRECTORY \}\}/);
   assert.doesNotMatch(workflow, /runner\.temp.*okf-release/);
   assert.doesNotMatch(
