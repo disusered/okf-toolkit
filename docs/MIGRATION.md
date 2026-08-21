@@ -19,7 +19,7 @@ shape and all workspace tests pass on Node 24.
 
 ## Gate 2: Herding Cats and XBOL
 
-- Install the exact `okf-cli` release candidate.
+- Install the exact `@disusered/okf-cli` release candidate.
 - Make generic Polychrome operations delegate to the CLI while keeping
   federation, Black, Red, Marginalia, Zotero, Journal, and Portal behavior in
   `polychromectl`.

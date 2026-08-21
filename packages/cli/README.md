@@ -1,7 +1,7 @@
-# okf-cli
+# @disusered/okf-cli
 
-`okf-cli` installs the `okf` binary. The CLI writes deterministic JSON by
-default and accepts `--json` so calling programs can state the contract
+`@disusered/okf-cli` installs the `okf` binary. The CLI writes deterministic
+JSON by default and accepts `--json` so calling programs can state the contract
 explicitly. Every command operates on exactly one bundle.
 
 ```sh

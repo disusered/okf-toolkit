@@ -1,7 +1,8 @@
 # Release OKF Toolkit
 
 GitHub Actions builds and publishes every OKF Toolkit release from a signed Git
-tag and its matching GitHub release. Do not run `npm publish` on a workstation.
+tag and its matching GitHub release. Do not publish a toolkit release from a
+workstation. The name bootstrap described in this guide is not a release.
 
 The `.github/workflows/release.yml` workflow starts when you publish a GitHub
 release for an annotated, signed tag named `v<version>`. The tag must point to the
@@ -72,18 +73,33 @@ The dependency order is:
 4. `okf-node`
 5. `okf-signatures`
 6. `okf-cloudflare`
-7. `okf-cli`
+7. `@disusered/okf-cli`
 
 A SemVer prerelease such as `1.0.0-rc.0` uses the npm `next` distribution tag
 and requires a GitHub prerelease. A stable version such as `1.0.0` uses `latest`
 and requires a standard GitHub release.
 
+## Bootstrap a package name
+
+npm exposes Trusted Publisher settings after the package name exists. For each
+new package name, publish a minimal `0.0.0-bootstrap` package under the
+`bootstrap` tag from an authenticated workstation. Use interactive 2FA. Do not
+create an automation token or include toolkit code in the bootstrap package.
+
+npm assigns `latest` to the first version of a package even when the publish
+command specifies another tag. Remove that `latest` tag after publication so a
+default install cannot select the empty bootstrap package. Do not create a Git
+tag or GitHub release for the bootstrap version.
+
+```bash
+npm dist-tag rm PACKAGE_NAME latest
+```
+
 ## Configure npm trusted publishing
 
 Configure each package by following the
-[npm trusted publishing guide](https://docs.npmjs.com/trusted-publishers). In
-the package settings on npmjs.com, select **Trusted Publisher**, choose
-**GitHub Actions**, and enter these values:
+[npm trusted publishing guide](https://docs.npmjs.com/trusted-publishers). The
+trusted publisher uses these values:
 
 - Organization or user: `disusered`
 - Repository: `okf-toolkit`
@@ -91,22 +107,45 @@ the package settings on npmjs.com, select **Trusted Publisher**, choose
 - Environment: `npm-release`
 - Allowed action: `npm publish`
 
-Repeat this configuration for all seven packages. npm accepts the workflow only
-when every value matches the GitHub repository and workflow. The release job
-runs on a GitHub-hosted runner with `id-token: write`, Node 24, and npm 11.5.1
-or later.
+Run these commands from an authenticated workstation with npm 11.15.0 or later:
+
+```bash
+packages=(
+  okf-contracts
+  okf-core
+  okf-viz
+  okf-node
+  okf-signatures
+  okf-cloudflare
+  @disusered/okf-cli
+)
+
+for package in "${packages[@]}"; do
+  npm trust github "$package" \
+    --repo disusered/okf-toolkit \
+    --file release.yml \
+    --env npm-release \
+    --allow-publish \
+    --yes
+  npm access set mfa=publish "$package"
+  npm trust list "$package" --json
+done
+```
+
+The local npm session changes package settings; it is not a release credential.
+The workflow configuration must match every value. The release job runs on a
+GitHub-hosted runner with `id-token: write`, Node 24, and npm 11.5.1 or later.
 
 The release workflow uses OpenID Connect (OIDC) for npm authentication. It does
 not read an npm token from GitHub secrets or the workstation. npm generates a
 provenance attestation for each public package published from the public
 repository, and the workflow verifies that attestation before it completes.
 
-After you configure trusted publishing, open **Settings** > **Publishing
-access** for each package and select **Require two-factor authentication and
+The `mfa=publish` setting selects **Require two-factor authentication and
 disallow tokens**. The trusted publisher continues to work because it uses
 short-lived OIDC credentials instead of traditional npm tokens.
 
-Do not create an npm automation token for this workflow. Do not add
+Do not create an npm automation token for the release workflow. Do not add
 `NODE_AUTH_TOKEN`, `NPM_TOKEN`, or another npm publish secret to the release
 job.
 
