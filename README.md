@@ -14,7 +14,7 @@ search, links, graphs, or writes across bundles.
 - `okf-viz`: deterministic self-contained HTML visualization.
 - `okf-node`: confined filesystem access, change application, and watch support.
 - `okf-cloudflare`: R2, MCP, and Queue consumer support.
-- `okf-cli`: the `okf` JSON CLI.
+- `@disusered/okf-cli`: the `okf` JSON CLI.
 - `okf-signatures`: optional Ed25519 bundle-integrity manifests.
 
 The workspace requires Node 24 and pnpm 10.28.2.

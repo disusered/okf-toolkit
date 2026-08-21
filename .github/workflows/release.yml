@@ -134,7 +134,7 @@ jobs:
           node --input-type=module --eval '
             const names = [
               "okf-contracts", "okf-core", "okf-viz", "okf-node",
-              "okf-signatures", "okf-cloudflare", "okf-cli",
+              "okf-signatures", "okf-cloudflare", "@disusered/okf-cli",
             ];
             const candidate = process.argv[1];
             const tag = process.argv[2];
@@ -301,7 +301,7 @@ jobs:
                 --arg ref "refs/tags/$RELEASE_TAG" \
                 --arg repository "https://github.com/disusered/okf-toolkit" \
                 --arg sha512 "$expected_sha512" \
-                --arg subject "pkg:npm/$name@$version" '
+                --arg subject "pkg:npm/${name/#@/%40}@$version" '
                   .predicateType == "https://slsa.dev/provenance/v1" and
                   any(.subject[];
                     .name == $subject and .digest.sha512 == $sha512) and
@@ -330,10 +330,11 @@ jobs:
             okf-node
             okf-signatures
             okf-cloudflare
-            okf-cli
+            "@disusered/okf-cli"
           )
           for name in "${packages[@]}"; do
-            filename="$name-$version.tgz"
+            filename="${name#@}"
+            filename="${filename//\//-}-$version.tgz"
             tarball="$RELEASE_DIRECTORY/$filename"
             awk -v filename="$filename" '$2 == filename { found = 1 } END { exit !found }' \
               "$RELEASE_DIRECTORY/SHA256SUMS"
@@ -430,7 +431,7 @@ jobs:
             "okf-node-$version.tgz"
             "okf-signatures-$version.tgz"
             "okf-cloudflare-$version.tgz"
-            "okf-cli-$version.tgz"
+            "disusered-okf-cli-$version.tgz"
             SHA256SUMS
             RELEASE.json
           )

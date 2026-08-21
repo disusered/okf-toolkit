@@ -11,8 +11,15 @@ export const releasePackages = [
   { directory: "node", name: "okf-node" },
   { directory: "signatures", name: "okf-signatures" },
   { directory: "cloudflare", name: "okf-cloudflare" },
-  { directory: "cli", name: "okf-cli" },
+  { directory: "cli", name: "@disusered/okf-cli" },
 ];
+
+export function packFilename(name, version) {
+  const stem = name.startsWith("@")
+    ? name.slice(1).replaceAll("/", "-")
+    : name;
+  return `${stem}-${version}.tgz`;
+}
 
 const semverPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -139,7 +146,7 @@ export async function loadReleasePlan({ tag } = {}) {
       dependencies: Object.keys(manifest.dependencies ?? {}).filter((name) =>
         name.startsWith("okf-"),
       ),
-      filename: `${releasePackage.name}-${version}.tgz`,
+      filename: packFilename(releasePackage.name, version),
     });
   }
 
