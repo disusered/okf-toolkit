@@ -215,6 +215,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          registry_visibility_delays=(0 1 2 4 8 16 32 64)
+
           registry_integrity() {
             local name="$1"
             local version="$2"
@@ -273,7 +275,7 @@ jobs:
             local attestations="$RUNNER_TEMP/npm-attestations.json"
             local statement="$RUNNER_TEMP/npm-provenance-statement.json"
             local url
-            for delay in 0 1 2 4 8 16; do
+            for delay in "${registry_visibility_delays[@]}"; do
               if (( delay > 0 )); then sleep "$delay"; fi
               if ! curl --fail --silent --show-error \
                 "https://registry.npmjs.org/$name/$version" \
@@ -354,30 +356,30 @@ jobs:
 
             current="$(registry_integrity "$name" "$version")"
             current_tag="$(registry_dist_tag "$name" "$DIST_TAG")"
-            if [[ "$current" == "$expected" ]]; then
-              if [[ "$current_tag" != "$version" ]]; then
-                printf '%s@%s matches, but %s points to %s\n' \
-                  "$name" "$version" "$DIST_TAG" "$current_tag" >&2
-                exit 1
-              fi
+            if [[ "$current" == "$expected" && "$current_tag" == "$version" ]]; then
               printf '%s@%s and %s already match; skipping\n' \
                 "$name" "$version" "$DIST_TAG"
               verify_provenance "$name" "$version" "$expected_sha512"
               continue
             fi
-            if [[ "$current" != MISSING ]]; then
+            if [[ "$current" != MISSING && "$current" != "$expected" ]]; then
               printf 'Registry integrity mismatch for %s@%s\n' "$name" "$version" >&2
               exit 1
             fi
 
-            npm publish "$tarball" \
-              --access public \
-              --ignore-scripts \
-              --provenance \
-              --tag "$DIST_TAG"
+            if [[ "$current" == MISSING && "$current_tag" != "$version" ]]; then
+              npm publish "$tarball" \
+                --access public \
+                --ignore-scripts \
+                --provenance \
+                --tag "$DIST_TAG"
+            else
+              printf 'npm is still processing %s@%s; waiting for registry visibility\n' \
+                "$name" "$version"
+            fi
 
             matched=false
-            for delay in 0 1 2 4 8 16; do
+            for delay in "${registry_visibility_delays[@]}"; do
               if (( delay > 0 )); then sleep "$delay"; fi
               current="$(registry_integrity "$name" "$version")"
               current_tag="$(registry_dist_tag "$name" "$DIST_TAG")"
