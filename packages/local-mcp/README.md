@@ -1,9 +1,13 @@
-# @disusered/okf-mcp
+# okf-local-mcp
 
-`@disusered/okf-mcp` installs the `okf-mcp` binary: a local MCP server that
-serves exactly one filesystem OKF bundle to a client that cannot reach the
-files itself. It runs on the user's machine, reads Markdown off disk, and talks
-to no network storage.
+`okf-local-mcp` provides the `okf-mcp` binary: a local MCP server that serves
+exactly one filesystem OKF bundle to a client that cannot reach the files
+itself. It runs on the user's machine, reads Markdown off disk, and talks to no
+network storage.
+
+The package is `private: true` and is never published. It runs from a checkout
+on the machine that owns the bundle, so there is nothing to install from a
+registry.
 
 ```sh
 okf-mcp /home/you/knowledge-repository --bundle private
