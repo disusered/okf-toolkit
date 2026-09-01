@@ -49,8 +49,9 @@ async function analyzeOptions(arguments_: CliArguments, io: CliIo): Promise<Anal
   if (arguments_.profile !== undefined) {
     throw new Error("The CLI does not support named --profile values; use --profile-module with a trusted consumer module");
   }
+  const today = arguments_.today === undefined ? {} : { today: arguments_.today };
   if (arguments_.profileModule === undefined) {
-    return {};
+    return today;
   }
   const specifier = arguments_.profileModule.startsWith("file:")
     ? arguments_.profileModule
@@ -60,7 +61,7 @@ async function analyzeOptions(arguments_: CliArguments, io: CliIo): Promise<Anal
   if (!validationProfile(candidate)) {
     throw new Error("profile module must export `profile` with string id and validate(context) function");
   }
-  return { profile: candidate };
+  return { ...today, profile: candidate };
 }
 
 async function resolve(arguments_: CliArguments, io: CliIo, minimumRest = 0): Promise<{ target: ResolvedBundleTarget; rest: string[] }> {
@@ -201,7 +202,13 @@ async function writeVisualization(arguments_: CliArguments, io: CliIo): Promise<
   const analysis = await target.bundle.analyze(await analyzeOptions(arguments_, io));
   const output = path.resolve(io.cwd, arguments_.out);
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, generateVisualization({ bundle: target.name ?? path.basename(target.bundle.root), analysis }), "utf8");
+  await writeFile(output, generateVisualization({
+    bundle: target.name ?? path.basename(target.bundle.root),
+    analysis,
+    // Explicit only. Never default to the system clock, or `okf visualize` stops being
+    // reproducible for every consumer that does not pass the flag.
+    evaluatedAt: arguments_.today ?? null,
+  }), "utf8");
   return { output, analysis, target };
 }
 
@@ -226,7 +233,11 @@ async function runWatch(arguments_: CliArguments, io: CliIo): Promise<number> {
   watchBundle(initial.target.bundle, async (event) => {
     await writeFile(
       initial.output,
-      generateVisualization({ bundle: initial.target.name ?? path.basename(initial.target.bundle.root), analysis: event.analysis }),
+      generateVisualization({
+        bundle: initial.target.name ?? path.basename(initial.target.bundle.root),
+        analysis: event.analysis,
+        evaluatedAt: arguments_.today ?? null,
+      }),
       "utf8",
     );
     io.stdout(stableJson({

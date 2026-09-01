@@ -1,12 +1,20 @@
 {
   "name": "okf-viz",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Deterministic, self-contained HTML visualization for an analyzed OKF bundle",
   "type": "module",
-  "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/viz" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/disusered/okf-toolkit.git",
+    "directory": "packages/viz"
+  },
   "homepage": "https://github.com/disusered/okf-toolkit#readme",
-  "bugs": { "url": "https://github.com/disusered/okf-toolkit/issues" },
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/disusered/okf-toolkit/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=24 <25"
   },

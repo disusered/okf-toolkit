@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { lstat, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -411,4 +411,60 @@ test("post-write validation rollback removes creates and restores deletes and mo
   assert.equal(await readFile(path.join(moveRoot, "concepts", "alpha.md"), "utf8"), beforeMove.content);
   assert.equal((await lstat(path.join(moveRoot, "concepts", "alpha.md"))).mode, moveMode);
   await assert.rejects(lstat(path.join(moveRoot, "archive")), { code: "ENOENT" });
+});
+
+const COMPUTATION = `---
+type: Attested Computation
+title: Club count
+description: How many clubs there are.
+runtime: postgres
+computation: ../references/clubs.sql
+attester:
+  resource: ../references/clubs.mjs
+---
+
+# Club count
+`;
+
+test("the loader reports the bundle files a contract names without loading them", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "references"));
+  await writeFile(path.join(root, "references", "clubs.sql"), "select count(*) from clubs;\n");
+  await writeFile(path.join(root, "references", "clubs.mjs"), "export const attest = () => true;\n");
+  await writeFile(path.join(root, "concepts", "clubs.md"), COMPUTATION);
+  const bundle = await FilesystemBundle.open(root);
+
+  assert.deepEqual(await bundle.listPaths(), ["concepts/alpha.md", "concepts/clubs.md", "index.md"]);
+  assert.deepEqual(await bundle.listFilePaths(), ["references/clubs.mjs", "references/clubs.sql"]);
+  assert.deepEqual(
+    [...await bundle.nonDocumentPaths()].sort(),
+    ["references/clubs.mjs", "references/clubs.sql"],
+  );
+
+  const analysis = await bundle.analyze();
+  assert.equal(analysis.summary.documents, 3);
+  assert.deepEqual(
+    analysis.diagnostics.guidance.filter((entry) => entry.code.startsWith("guidance.contract.")),
+    [],
+  );
+
+  await unlink(path.join(root, "references", "clubs.sql"));
+  const withoutQuery = await bundle.analyze();
+  assert.ok(
+    withoutQuery.diagnostics.guidance.some((entry) => entry.code === "guidance.contract.broken"),
+    "a contract path is only satisfied while the file it names is actually there",
+  );
+});
+
+test("a file that is not a document is no way around the symlink and confinement rules", async () => {
+  const root = await fixture();
+  const outside = path.join(await mkdtemp(path.join(tmpdir(), "okf-outside-")), "clubs.sql");
+  await writeFile(outside, "select 1;\n");
+  await symlink(outside, path.join(root, "concepts", "clubs.sql"));
+  const bundle = await FilesystemBundle.open(root);
+
+  await assert.rejects(bundle.listFilePaths(), /symbolic links are not allowed/);
+  await assert.rejects(bundle.listPaths(), /symbolic links are not allowed/);
+  await assert.rejects(bundle.analyze(), /symbolic links are not allowed/);
+  await assert.rejects(bundle.readDocument("../clubs.sql"), BundlePathError);
 });

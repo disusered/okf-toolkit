@@ -76,8 +76,20 @@ interface FilesystemChangeHooks {
   readonly link?: typeof link;
 }
 
-function groupedDiagnostics(documents: readonly RawBundleDocument[], options: AnalyzeBundleOptions): Diagnostic[] {
-  const analysis = analyzeBundle(documents, options);
+/**
+ * A change only ever rewrites documents, so the bundle's other files are read from disk as
+ * they are. Without them a contract path that names a query or a script would report broken
+ * on every preview and every post-write validation.
+ */
+async function groupedDiagnostics(
+  bundle: FilesystemBundle,
+  documents: readonly RawBundleDocument[],
+  options: AnalyzeBundleOptions,
+): Promise<Diagnostic[]> {
+  const analysis = analyzeBundle(documents, {
+    ...options,
+    nonDocumentPaths: await bundle.nonDocumentPaths(),
+  });
   return [
     ...analysis.diagnostics.core,
     ...analysis.diagnostics.guidance,
@@ -175,7 +187,7 @@ export async function previewChange(
       replaceDocument(proposed, change.from_path, null);
       replaceDocument(proposed, change.to_path, { ...source, path: change.to_path });
     }
-    diagnostics.push(...groupedDiagnostics(proposed, options));
+    diagnostics.push(...await groupedDiagnostics(bundle, proposed, options));
   }
 
   return {
@@ -345,7 +357,7 @@ function completedResult(
 }
 
 async function validateCurrent(bundle: FilesystemBundle, options: AnalyzeBundleOptions): Promise<Diagnostic[]> {
-  return groupedDiagnostics(await bundle.readDocuments(), options);
+  return groupedDiagnostics(bundle, await bundle.readDocuments(), options);
 }
 
 function postWriteDiagnostic(change: Change): Diagnostic {
@@ -383,7 +395,7 @@ async function validationForApply(
     if (change.operation !== "move") throw new Error(`change ${change.operation} does not support move validation`);
     replaceDocument(documents, change.from_path, null);
   }
-  return groupedDiagnostics(documents, options);
+  return groupedDiagnostics(bundle, documents, options);
 }
 
 export function applyChange(

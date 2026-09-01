@@ -9,7 +9,22 @@ export function contentRevision(content: string | Uint8Array): Revision {
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
 
-async function collectMarkdown(root: string, directory: string, prefix: string, output: string[]): Promise<void> {
+/**
+ * What one walk of a bundle root finds: the OKF documents to parse, and the other files that
+ * are simply there. A contract may name one of those other files — a query, an attester
+ * script — so the analysis has to be told they exist even though nothing reads them.
+ */
+interface BundleEntries {
+  readonly documents: string[];
+  readonly files: string[];
+}
+
+async function collectEntries(
+  root: string,
+  directory: string,
+  prefix: string,
+  output: BundleEntries,
+): Promise<void> {
   const entries = [];
   const handle = await opendir(directory);
   for await (const entry of handle) {
@@ -24,13 +39,15 @@ async function collectMarkdown(root: string, directory: string, prefix: string, 
     }
     const candidate = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      await collectMarkdown(root, candidate, relative, output);
-    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      await collectEntries(root, candidate, relative, output);
+    } else if (entry.isFile()) {
+      // A non-Markdown file gets the same confinement it would as a document; not being
+      // parsed must not make it a way around the escape check.
       const canonical = await realpath(candidate);
       if (!isWithinRoot(root, canonical)) {
         throw new Error(`bundle path escapes its root: ${relative}`);
       }
-      output.push(relative);
+      (entry.name.endsWith(".md") ? output.documents : output.files).push(relative);
     }
   }
 }
@@ -53,10 +70,27 @@ export class FilesystemBundle {
     return new FilesystemBundle(await realpath(root));
   }
 
+  private async collect(): Promise<BundleEntries> {
+    const output: BundleEntries = { documents: [], files: [] };
+    await collectEntries(this.root, this.root, "", output);
+    output.documents.sort(byCodePoint);
+    output.files.sort(byCodePoint);
+    return output;
+  }
+
+  /** The OKF documents in this bundle. Markdown only, as every caller of it expects. */
   async listPaths(): Promise<string[]> {
-    const paths: string[] = [];
-    await collectMarkdown(this.root, this.root, "", paths);
-    return paths.sort(byCodePoint);
+    return (await this.collect()).documents;
+  }
+
+  /** The bundle's other files, which a contract path may name. Nothing here is parsed. */
+  async listFilePaths(): Promise<string[]> {
+    return (await this.collect()).files;
+  }
+
+  /** `listFilePaths` in the shape `analyzeBundle` takes it. */
+  async nonDocumentPaths(): Promise<ReadonlySet<string>> {
+    return new Set(await this.listFilePaths());
   }
 
   async readDocument(relativePath: string): Promise<RawBundleDocument> {
@@ -80,6 +114,8 @@ export class FilesystemBundle {
   }
 
   async analyze(options: AnalyzeBundleOptions = {}): Promise<BundleAnalysis> {
-    return analyzeBundle(await this.readDocuments(), options);
+    const { documents, files } = await this.collect();
+    const raw = await Promise.all(documents.map(async (documentPath) => this.readDocument(documentPath)));
+    return analyzeBundle(raw, { ...options, nonDocumentPaths: new Set(files) });
   }
 }

@@ -68,6 +68,34 @@ export interface AnalyzedSource {
   readonly exists: boolean | null;
 }
 
+/** A `{ from, to }` date range framing every `usage_count` it applies to (SPEC 5.1). */
+export interface UsageWindow {
+  readonly from: string | null;
+  readonly to: string | null;
+}
+
+/**
+ * Derived fields that `okf.inspect.v1` has no room for. Every object that could hold them
+ * (`$defs/document`, `derived`, `source`, `node`) is `additionalProperties: false` and frozen
+ * by Gate 1 of the migration, so they are projected beside the analysis rather than inside it.
+ * Fold them into `derived` when `okf.inspect.v2` is cut.
+ */
+export interface DocumentExtensions {
+  readonly path: string;
+  /**
+   * The document's OKF type under the name catalog predicates match on, for example
+   * `aspect:project.region.okf.okf_type=Metric`. Same value as `derived.type`.
+   */
+  readonly okf_type: string | null;
+  /** The bundle-shared `usage_window`, framing every `usage_count` without an override. */
+  readonly usageWindow: UsageWindow | null;
+  /**
+   * Each usable `sources` entry's own `usage_window`, parallel to `derived.sources` and
+   * `null` where the entry inherits `usageWindow`. Effective window is `override ?? shared`.
+   */
+  readonly sourceUsageWindows: readonly (UsageWindow | null)[];
+}
+
 /** Values that cross the versioned JSON wire boundary without coercion. */
 export type JsonValue = null | boolean | number | string | JsonObject | readonly JsonValue[];
 

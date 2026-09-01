@@ -10,7 +10,11 @@ and retains ownership of its domain policy.
 - Run the OKF v0.2 conformance fixtures against the core.
 - Verify that filesystem and R2 adapters produce the same Bundle Analysis for
   the same bytes.
-- Verify that repeated visualization builds produce identical HTML bytes.
+- Verify that repeated visualization builds produce identical HTML bytes for the same
+  `(bundle, analysis, evaluatedAt)`. `evaluatedAt` is an input, omitted by default; when a
+  consumer supplies it the bytes depend on that date by construction, and the page prints
+  the date it was judged against so the artifact stays reproducible from the bundle plus
+  its own printed date.
 - Publish exact-version `1.0.0-rc.N` packages and a checksummed contracts
   archive by following [`RELEASE.md`](RELEASE.md).
 
@@ -66,4 +70,5 @@ rebuild the same viewer without cross-Bundle behavior.
 - DataBook profiles and semantic execution.
 - Any source archive or Zotero replacement.
 - Mermaid and product-specific visualization features.
+- Cross-consumer visual theming beyond the trust and freshness signals now surfaced.
 - Replacement of the historical Brain Portal projection.

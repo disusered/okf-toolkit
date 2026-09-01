@@ -22,6 +22,9 @@ import type {
   ValidationProfileContext,
 } from "./types.js";
 
+/** A bundle whose loader reported no non-document files is analyzed against this. */
+const NO_PATHS: ReadonlySet<string> = new Set<string>();
+
 function mapping(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -174,6 +177,7 @@ export function parseBundleDocument(
   const kind = documentKind(raw.path);
   const metadata = parsed.snapshot?.metadata ?? {};
   const knownPaths = options.knownPaths ?? new Set([raw.path]);
+  const nonDocumentPaths = options.nonDocumentPaths ?? NO_PATHS;
   const today = options.today ?? null;
   const links = extractMarkdownLinks(parsed.body, {
     sourcePath: raw.path,
@@ -186,6 +190,7 @@ export function parseBundleDocument(
     parsed.body,
     raw.path,
     knownPaths,
+    nonDocumentPaths,
     today,
   );
   const document: AnalyzedDocument = {
@@ -242,7 +247,11 @@ export function analyzeBundle(
   const core: Diagnostic[] = [];
   const guidance: Diagnostic[] = [];
   const documents = ordered.map((raw) => {
-    const parsed = parseBundleDocument(raw, { knownPaths, ...(options.today ? { today: options.today } : {}) });
+    const parsed = parseBundleDocument(raw, {
+      knownPaths,
+      ...(options.nonDocumentPaths ? { nonDocumentPaths: options.nonDocumentPaths } : {}),
+      ...(options.today ? { today: options.today } : {}),
+    });
     core.push(...parsed.diagnostics.core);
     guidance.push(...parsed.diagnostics.guidance);
     return parsed.document;

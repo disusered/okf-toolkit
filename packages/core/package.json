@@ -1,17 +1,27 @@
 {
   "name": "okf-core",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Canonical parser, validator, link resolver, graph, and search engine for OKF v0.2",
   "type": "module",
-  "repository": { "type": "git", "url": "git+https://github.com/disusered/okf-toolkit.git", "directory": "packages/core" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/disusered/okf-toolkit.git",
+    "directory": "packages/core"
+  },
   "homepage": "https://github.com/disusered/okf-toolkit#readme",
-  "bugs": { "url": "https://github.com/disusered/okf-toolkit/issues" },
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/disusered/okf-toolkit/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24 <25"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
