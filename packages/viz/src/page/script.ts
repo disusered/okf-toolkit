@@ -57,7 +57,6 @@ export const PAGE_SCRIPT = String.raw`
   var tagsTerm = document.getElementById("dt-tags");
   var tagsEl = document.getElementById("detail-tags");
   var flagEl = document.getElementById("detail-flag");
-  var legendEl = document.getElementById("legend");
   var mainEl = document.querySelector("main");
   var splitEl = document.getElementById("split");
 
@@ -118,23 +117,17 @@ export const PAGE_SCRIPT = String.raw`
   }
 
   var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  var INK = dark ? "#f8fafc" : "#0f172a";
   var MUTED = dark ? "#94a3b8" : "#64748b";
-  var FAINT = dark ? "#475569" : "#cbd5e1";
 
   var cy = cytoscape({
     container: document.getElementById("graph"),
     elements: graph.nodes.map(function (node) {
-      var classes = [];
-      if (node.trustTier === "human-reviewed") { classes.push("human"); }
-      if (node.trustTier === "machine-confirmed") { classes.push("machine"); }
-      if (node.trustTier === "unverified" && !node.pending) { classes.push("unverified"); }
-      if (node.stale === true) { classes.push("stale"); }
-      if (node.status === "deprecated") { classes.push("deprecated"); }
-      if (node.pending) { classes.push("pending"); }
+      // The graph carries structure and type. Trust, freshness and lifecycle are read from
+      // the reader's metadata table, where they are legible without a key.
+      var classes = node.pending ? "pending" : "";
       return {
         data: { id: node.id, label: node.title, color: node.color, size: node.size },
-        classes: classes.join(" ")
+        classes: classes
       };
     }).concat(graph.edges.map(function (edge) {
       return { data: { id: edge.id, source: edge.source, target: edge.target, relation: edge.relation } };
@@ -159,11 +152,6 @@ export const PAGE_SCRIPT = String.raw`
           "height": "data(size)"
         }
       },
-      { selector: "node.unverified", style: { "border-width": 2, "border-style": "dotted", "border-color": FAINT } },
-      { selector: "node.machine", style: { "border-width": 2, "border-style": "dashed", "border-color": MUTED } },
-      { selector: "node.human", style: { "border-width": 2, "border-style": "solid", "border-color": INK } },
-      { selector: "node.stale", style: { "border-width": 3, "border-style": "double", "border-color": "#b45309" } },
-      { selector: "node.deprecated", style: { "opacity": 0.45 } },
       { selector: "node.pending", style: { "opacity": 0.5, "border-width": 1, "border-style": "dotted", "border-color": "#94a3b8" } },
       { selector: "node:selected", style: { "border-width": 4, "border-color": "#b45309" } },
       {

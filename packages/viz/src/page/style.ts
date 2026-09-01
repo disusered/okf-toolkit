@@ -203,25 +203,6 @@ ul.plain .muted { display: block; font-family: ui-monospace, SFMono-Regular, Men
 
 .tag:hover { border-color: var(--accent); }
 
-#legend { flex-basis: 100%; font-size: 12px; }
-#legend summary { cursor: pointer; }
-#legend ul { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0 0; color: var(--muted); }
-
-.ring {
-  display: inline-block;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  margin-right: 4px;
-  vertical-align: -1px;
-  background: var(--muted);
-}
-
-.ring.human { box-shadow: 0 0 0 2px var(--ink); }
-.ring.machine { box-shadow: 0 0 0 2px var(--muted); }
-.ring.none { box-shadow: 0 0 0 2px var(--line); }
-.ring.stale { box-shadow: 0 0 0 3px var(--accent); }
-.ring.faded { opacity: .35; }
 
 /* Narrow viewports stack however the toggle is set; columns needs width to earn its keep. */
 @media (max-width: 820px) {

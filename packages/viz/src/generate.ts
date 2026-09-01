@@ -156,16 +156,6 @@ export function generateVisualization(input: VisualizationInput): string {
     </select>
     <button id="reset" type="button">Reset view</button>
   </div>
-  <details id="legend" open>
-    <summary class="muted">Key</summary>
-    <ul class="plain">
-      <li><span class="ring human"></span> reviewed by a person</li>
-      <li><span class="ring machine"></span> confirmed by a machine only</li>
-      <li><span class="ring none"></span> unverified — nobody has attested it</li>
-      <li><span class="ring stale"></span> past its <code>stale_after</code></li>
-      <li><span class="ring faded"></span> deprecated, or not yet written</li>
-    </ul>
-  </details>
 </header>
 
 <main>

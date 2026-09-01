@@ -30,13 +30,18 @@ hostname, storage location, or runtime configuration enters the generator.
 ## Trust and freshness
 
 The visualizer projects the trust signals `okf-core` derives and never re-derives them. Each
-node carries `trustTier`, `stale`, `staleAfter`, `tags`, and `status`; the page encodes trust
-as a border, staleness as a doubled amber border, and `deprecated` as reduced opacity. The
-reader always shows a Trust row, so an absent signal can never be read as verification.
+node carries `trustTier`, `stale`, `staleAfter`, `tags`, and `status`.
 
-A filter appears only when the bundle actually varies on that facet. When it does not, the
-header says so outright — `21 pages, 34 relationships, all unverified` — because a hidden
-filter must not let a reader infer a review nobody performed.
+Those are read in the reader's metadata table, not from the graph. Encoding three trust tiers
+as border styles was tried and removed: distinguishing dotted from dashed on a small circle is
+not something a reader can do at a glance, so it needed a permanent key, and a key is a poor
+trade for a signal the table already states in words. The graph carries structure and type.
+
+The reader always shows a Trust row, so an absent signal can never be read as verification.
+Filtering by trust, status or staleness is still available; a filter appears only when the
+bundle actually varies on that facet, and when it does not the header says so outright —
+`21 pages, 34 relationships, all unverified` — because a hidden filter must not let a reader
+infer a review nobody performed.
 
 A link whose target nobody has written becomes a pending placeholder node rather than being
 dropped, so the graph shows the work the bundle has given itself.

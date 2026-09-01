@@ -392,6 +392,9 @@ test("the reader is laid out beside the graph and can still scroll", () => {
   assert.ok(html.indexOf('id="graph"') < html.indexOf('id="split"'));
   assert.ok(html.indexOf('id="split"') < html.indexOf('id="detail"'));
   assert.match(html, /main \{ display: flex; flex-direction: row;/);
+  // The graph carries structure and type only; state is read from the metadata table.
+  assert.ok(!html.includes('id="legend"'), "no legend row");
+  assert.ok(!html.includes("node.human"), "no trust encoding on nodes");
   assert.match(html, /main\[data-orientation="rows"\] \{ flex-direction: column; \}/);
   assert.match(html, /#detail \{[^}]*min-height: 0;[^}]*overflow-y: auto;/s);
 });
