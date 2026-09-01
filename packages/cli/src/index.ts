@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import type { BundleAnalysis } from "okf-contracts";
-import { searchBundle, type AnalyzeBundleOptions, type ValidationProfile } from "okf-core";
+import { searchBundle, type AnalyzeBundleOptions } from "okf-core";
 import {
   applyChange,
+  loadValidationProfile,
   parseChange,
   previewChange,
   readBundleContext,
@@ -23,14 +23,6 @@ export interface CliIo {
   readonly stdout: (value: string) => void;
   readonly stderr: (value: string) => void;
   readonly signal?: AbortSignal;
-}
-
-function mapping(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function validationProfile(value: unknown): value is ValidationProfile {
-  return mapping(value) && typeof value.id === "string" && typeof value.validate === "function";
 }
 
 function errorMessage(error: unknown): string {
@@ -53,15 +45,7 @@ async function analyzeOptions(arguments_: CliArguments, io: CliIo): Promise<Anal
   if (arguments_.profileModule === undefined) {
     return today;
   }
-  const specifier = arguments_.profileModule.startsWith("file:")
-    ? arguments_.profileModule
-    : pathToFileURL(path.resolve(io.cwd, arguments_.profileModule)).href;
-  const loaded: unknown = await import(specifier);
-  const candidate = mapping(loaded) ? loaded.profile : undefined;
-  if (!validationProfile(candidate)) {
-    throw new Error("profile module must export `profile` with string id and validate(context) function");
-  }
-  return { ...today, profile: candidate };
+  return { ...today, profile: await loadValidationProfile(io.cwd, arguments_.profileModule) };
 }
 
 async function resolve(arguments_: CliArguments, io: CliIo, minimumRest = 0): Promise<{ target: ResolvedBundleTarget; rest: string[] }> {

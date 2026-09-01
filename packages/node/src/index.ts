@@ -18,4 +18,5 @@ export {
   previewChange,
 } from "./changes.js";
 export { BundlePathError, normalizeBundlePath } from "./path.js";
+export { loadValidationProfile } from "./profile.js";
 export { watchBundle, type BundleWatchEvent, type WatchBundleOptions } from "./watch.js";

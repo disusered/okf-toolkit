@@ -1,0 +1,8 @@
+schema_version: 1
+adapter: fixture
+bundles:
+  sealed:
+    root: docs
+    index: index.md
+    audience: Fixture bundle that refuses writes
+    access: read

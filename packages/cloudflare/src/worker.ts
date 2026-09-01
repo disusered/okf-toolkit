@@ -1,13 +1,13 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { Change } from "okf-contracts";
 import { parseChange } from "okf-core";
-
 import {
   createOkfV1McpServer,
   OKF_V1_MCP_PATH,
   OKF_V1_VISUALIZATION_PATH,
   type OkfV1Operations,
-} from "./mcp.js";
+} from "okf-mcp";
+
 import type { R2BucketLike } from "./r2.js";
 
 const REQUIRED_ACCEPT = "application/json, text/event-stream";

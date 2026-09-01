@@ -3,6 +3,7 @@ import { lstat, mkdtemp, mkdir, readFile, symlink, unlink, writeFile } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import { OPERATIONS_SCHEMA } from "okf-contracts";
 import {
   BundlePathError,
@@ -10,6 +11,7 @@ import {
   applyChange,
   changePreviewId,
   contentRevision,
+  loadValidationProfile,
   normalizeBundlePath,
   parseChange,
   previewChange,
@@ -467,4 +469,44 @@ test("a file that is not a document is no way around the symlink and confinement
   await assert.rejects(bundle.listPaths(), /symbolic links are not allowed/);
   await assert.rejects(bundle.analyze(), /symbolic links are not allowed/);
   await assert.rejects(bundle.readDocument("../clubs.sql"), BundlePathError);
+});
+
+async function profileModule(source: string): Promise<{ directory: string; filename: string }> {
+  const directory = await mkdtemp(path.join(tmpdir(), "okf-profile-"));
+  const filename = "profile.mjs";
+  await writeFile(path.join(directory, filename), source);
+  return { directory, filename };
+}
+
+test("a profile module is resolved against the base directory rather than the process cwd", async () => {
+  const { directory, filename } = await profileModule(
+    "export const profile = { id: 'relative-base', validate: () => [] };\n",
+  );
+
+  const profile = await loadValidationProfile(directory, `./${filename}`);
+
+  assert.equal(profile.id, "relative-base");
+  await assert.rejects(loadValidationProfile(process.cwd(), `./${filename}`), {
+    code: "ERR_MODULE_NOT_FOUND",
+  });
+});
+
+test("a file URL specifier is imported as given", async () => {
+  const { directory, filename } = await profileModule(
+    "export const profile = { id: 'already-a-url', validate: () => [] };\n",
+  );
+  const specifier = pathToFileURL(path.join(directory, filename)).href;
+
+  const profile = await loadValidationProfile(await mkdtemp(path.join(tmpdir(), "okf-elsewhere-")), specifier);
+
+  assert.equal(profile.id, "already-a-url");
+});
+
+test("a module without a usable profile export is refused before analysis", async () => {
+  const missing = await profileModule("export const other = 1;\n");
+  const unusable = await profileModule("export const profile = { id: 7, validate: () => [] };\n");
+  const message = /profile module must export `profile` with string id and validate\(context\) function/;
+
+  await assert.rejects(loadValidationProfile(missing.directory, `./${missing.filename}`), message);
+  await assert.rejects(loadValidationProfile(unusable.directory, `./${unusable.filename}`), message);
 });

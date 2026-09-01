@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { OkfV1Operations } from "../src/mcp.js";
+import type { OkfV1Operations } from "okf-mcp";
 import { createOkfV1Worker } from "../src/worker.js";
 import { memoryBucket } from "./support.js";
 

@@ -25,13 +25,15 @@ test("release plan fixes package order and prerelease tag", async () => {
       "okf-viz",
       "okf-node",
       "okf-signatures",
+      "okf-mcp",
       "okf-cloudflare",
       "@disusered/okf-cli",
+      "@disusered/okf-mcp",
     ],
   );
   assert.equal(
     plan.packages.at(-1)?.filename,
-    `disusered-okf-cli-${VERSION}.tgz`,
+    `disusered-okf-mcp-${VERSION}.tgz`,
   );
 });
 
