@@ -229,3 +229,11 @@ export interface ChangeResult {
   readonly revisions: Readonly<Record<string, Revision | null>>;
   readonly diagnostics: readonly Diagnostic[];
 }
+
+export {
+  createOkfV1McpServer,
+  OKF_V1_MCP_PATH,
+  OKF_V1_VISUALIZATION_PATH,
+  type OkfV1McpOptions,
+  type OkfV1Operations,
+} from "./mcp.js";

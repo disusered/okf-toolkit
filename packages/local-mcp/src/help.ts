@@ -1,4 +1,4 @@
-import { OKF_V1_MCP_PATH } from "okf-mcp";
+import { OKF_V1_MCP_PATH } from "okf-contracts";
 
 import { DEFAULT_HTTP_PORT, LOOPBACK_HOST } from "./arguments.js";
 

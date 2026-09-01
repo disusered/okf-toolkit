@@ -37,8 +37,7 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
     "okf-contracts": "workspace:*",
-    "okf-core": "workspace:*",
-    "okf-mcp": "workspace:*"
+    "okf-core": "workspace:*"
   },
   "devDependencies": {
     "okf-node": "workspace:*"

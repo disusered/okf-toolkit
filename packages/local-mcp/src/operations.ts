@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import type { ApplyChangeRequest, BundleAnalysis, Change, ChangePreview, ChangeResult } from "okf-contracts";
 import { listBundleEntries, searchBundle, type AnalyzeBundleOptions } from "okf-core";
-import type { OkfV1Operations } from "okf-mcp";
+import type { OkfV1Operations } from "okf-contracts";
 import {
   applyChange,
   previewChange,

@@ -2,7 +2,7 @@ import path from "node:path";
 
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { AnalyzeBundleOptions } from "okf-core";
-import { createOkfV1McpServer, type OkfV1Operations } from "okf-mcp";
+import { createOkfV1McpServer, type OkfV1Operations } from "okf-contracts";
 import { loadValidationProfile, resolveBundleTarget, type ResolvedBundleTarget } from "okf-node";
 
 import { bundleSettings, type BundleSettings } from "./bundle.js";

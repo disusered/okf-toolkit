@@ -65,7 +65,6 @@ try {
     installation,
   );
   run(join(installation, "node_modules", ".bin", "okf"), [], installation);
-  run(join(installation, "node_modules", ".bin", "okf-mcp"), ["--help"], installation);
 } finally {
   await rm(installation, { force: true, recursive: true });
 }

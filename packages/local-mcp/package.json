@@ -1,5 +1,5 @@
 {
-  "name": "@disusered/okf-mcp",
+  "name": "okf-local-mcp",
   "version": "1.0.0-rc.2",
   "description": "Local stdio and loopback HTTP MCP server for one filesystem OKF bundle",
   "type": "module",
@@ -11,9 +11,6 @@
   "homepage": "https://github.com/disusered/okf-toolkit#readme",
   "bugs": {
     "url": "https://github.com/disusered/okf-toolkit/issues"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "engines": {
     "node": ">=24 <25"
@@ -40,7 +37,6 @@
     "@modelcontextprotocol/server": "2.0.0",
     "okf-contracts": "workspace:*",
     "okf-core": "workspace:*",
-    "okf-mcp": "workspace:*",
     "okf-node": "workspace:*",
     "okf-viz": "workspace:*"
   },
@@ -49,5 +45,6 @@
     "@types/node": "24.13.3",
     "typescript": "7.0.2"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "private": true
 }
