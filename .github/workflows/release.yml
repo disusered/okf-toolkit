@@ -63,7 +63,7 @@ jobs:
           jq -e --arg tag "$RELEASE_TAG" '
             .schema == "okf.release.v1" and
             .tag == $tag and
-            (.packages | length) == 9
+            (.packages | length) == 7
           ' "$RELEASE_DIRECTORY/RELEASE.json"
           node scripts/verify-release-artifacts.mjs \
             --tag "$RELEASE_TAG" \
@@ -113,7 +113,7 @@ jobs:
           jq -e --arg tag "$RELEASE_TAG" '
             .schema == "okf.release.v1" and
             .tag == $tag and
-            (.packages | length) == 9
+            (.packages | length) == 7
           ' "$RELEASE_DIRECTORY/RELEASE.json"
           npm_version="$(npm --version)"
           npm_major="${npm_version%%.*}"
@@ -134,8 +134,7 @@ jobs:
           node --input-type=module --eval '
             const names = [
               "okf-contracts", "okf-core", "okf-viz", "okf-node",
-              "okf-signatures", "okf-mcp", "okf-cloudflare",
-              "@disusered/okf-cli", "@disusered/okf-mcp",
+              "okf-signatures", "okf-cloudflare", "@disusered/okf-cli",
             ];
             const candidate = process.argv[1];
             const tag = process.argv[2];
@@ -332,10 +331,8 @@ jobs:
             okf-viz
             okf-node
             okf-signatures
-            okf-mcp
             okf-cloudflare
             "@disusered/okf-cli"
-            "@disusered/okf-mcp"
           )
           for name in "${packages[@]}"; do
             filename="${name#@}"
@@ -435,10 +432,8 @@ jobs:
             "okf-viz-$version.tgz"
             "okf-node-$version.tgz"
             "okf-signatures-$version.tgz"
-            "okf-mcp-$version.tgz"
             "okf-cloudflare-$version.tgz"
             "disusered-okf-cli-$version.tgz"
-            "disusered-okf-mcp-$version.tgz"
             SHA256SUMS
             RELEASE.json
           )

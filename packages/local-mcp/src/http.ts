@@ -9,7 +9,7 @@ import {
   originValidationResponse,
   type McpServerFactory,
 } from "@modelcontextprotocol/server";
-import { OKF_V1_MCP_PATH } from "okf-mcp";
+import { OKF_V1_MCP_PATH } from "okf-contracts";
 
 import { LOOPBACK_HOST } from "./arguments.js";
 

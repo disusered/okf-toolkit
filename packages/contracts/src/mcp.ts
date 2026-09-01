@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import type { ApplyChangeRequest, Change, ChangePreview, ChangeResult } from "okf-contracts";
+import type { ApplyChangeRequest, Change, ChangePreview, ChangeResult } from "./index.js";
 import * as z from "zod/v4";
 
 export const OKF_V1_MCP_PATH = "/v1/mcp";

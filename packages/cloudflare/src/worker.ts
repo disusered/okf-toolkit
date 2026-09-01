@@ -6,7 +6,7 @@ import {
   OKF_V1_MCP_PATH,
   OKF_V1_VISUALIZATION_PATH,
   type OkfV1Operations,
-} from "okf-mcp";
+} from "okf-contracts";
 
 import type { R2BucketLike } from "./r2.js";
 

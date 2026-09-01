@@ -1,4 +1,4 @@
-export * from "okf-mcp";
+export * from "okf-contracts";
 
 export * from "./durable-object.js";
 export * from "./operations.js";
