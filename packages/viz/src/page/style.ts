@@ -213,6 +213,106 @@ ul.plain .muted { display: block; font-family: ui-monospace, SFMono-Regular, Men
 
 .tag:hover { border-color: var(--accent); }
 
+/*
+ * The dated strip. Every mark is placed along one shared axis as a percentage, so the strip
+ * stays proportional at any panel width. Labels alternate above and below the axis, which is
+ * what stops two nearby dates from printing over each other, and the marks near either end
+ * anchor their label inward instead of centring it off the edge.
+ */
+#detail-timeline { margin: 0 0 18px; }
+
+.timeline { position: relative; height: 88px; }
+
+.timeline-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 1px);
+  height: 2px;
+  background: var(--line);
+}
+
+/*
+ * The stretch a page has already outlived, drawn from its expiry to the evaluation date.
+ * Hatched rather than tinted so the overrun still reads where the accent colour does not.
+ */
+.timeline-overrun {
+  position: absolute;
+  top: calc(50% - 4px);
+  height: 8px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--accent),
+    var(--accent) 2px,
+    var(--panel) 2px,
+    var(--panel) 5px
+  );
+}
+
+.timeline-marks { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+
+/* Zero width: the mark is a point on the axis, and everything hangs off that point. */
+.tl-mark { position: absolute; top: 0; bottom: 0; width: 0; }
+
+.tl-dot {
+  position: absolute;
+  top: calc(50% - 5px);
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+.tl-stem { position: absolute; left: 0; width: 1px; background: var(--line); }
+.tl-above > .tl-stem { top: 34px; height: calc(50% - 34px); }
+.tl-below > .tl-stem { top: 50%; height: 34px; }
+
+.tl-label {
+  position: absolute;
+  left: 0;
+  display: block;
+  max-width: 132px;
+  transform: translateX(-50%);
+  text-align: center;
+  line-height: 1.25;
+}
+
+.tl-above > .tl-label { bottom: calc(50% + 12px); }
+.tl-below > .tl-label { top: calc(50% + 12px); }
+.tl-start > .tl-label { transform: none; text-align: left; }
+.tl-end > .tl-label { transform: translateX(-100%); text-align: right; }
+
+.tl-what, .tl-when { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-what { font-size: 11px; font-weight: 600; color: var(--ink); }
+.tl-when { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: var(--muted); }
+
+/* Shape carries the kind as well as colour, so the strip survives a monochrome print. */
+.tl-written > .tl-dot { border-radius: 2px; background: var(--muted); }
+.tl-checked > .tl-what { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; font-weight: 400; }
+.tl-expires > .tl-dot { border-radius: 2px; background: var(--accent); transform: rotate(45deg); }
+.tl-today > .tl-dot { background: var(--panel); box-shadow: 0 0 0 2px var(--ink); }
+.tl-today > .tl-stem { top: 12px; height: calc(100% - 24px); width: 0; background: none; border-left: 1px dashed var(--muted); }
+
+.timeline-note { margin: 0; font-size: 11.5px; color: var(--accent); }
+
+/* Usage bars scale to the busiest source on the page, never to anything off it. */
+.usage { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+
+.usage-bar {
+  flex: 0 0 130px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--code);
+  overflow: hidden;
+}
+
+.usage-fill { display: block; height: 100%; min-width: 2px; border-radius: 3px; background: var(--muted); }
+.usage-count { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.usage-window { margin-top: 8px; font-size: 11px; color: var(--muted); }
+
 
 /* Narrow viewports stack however the toggle is set; columns needs width to earn its keep. */
 @media (max-width: 820px) {

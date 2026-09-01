@@ -5,7 +5,7 @@ import test from "node:test";
 import type { Diagnostic, RawBundleDocument } from "okf-contracts";
 
 import type { ProfileDiagnostic } from "../src/index.js";
-import { analyzeBundle, parseBundleDocument } from "../src/index.js";
+import { analyzeBundle, documentExtensions, parseBundleDocument } from "../src/index.js";
 
 interface Fixture {
   readonly today?: string;
@@ -337,4 +337,173 @@ executor:
   const broken = diagnostics.find((entry) => entry.code === "guidance.contract.broken");
   assert.ok(broken, "a broken executor path must be reported");
   assert.match(broken!.message, /executor\.resource does not resolve/);
+});
+
+test("the OKF type and both usage windows reach a consumer as extensions", () => {
+  const analysis = analyzeBundle([
+    { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+    {
+      path: "concepts/revenue.md",
+      content: `---
+type: Metric
+title: Revenue
+description: Recognised revenue.
+usage_window: { from: "2026-06-01", to: "2026-06-30" }
+sources:
+  - resource: https://example.com/shared-window
+    usage_count: 5000
+  - resource: https://example.com/own-window
+    usage_count: 12
+    usage_window: { from: "2026-01-01", to: "2026-03-31" }
+---
+
+# Revenue
+`,
+    },
+  ]);
+
+  const document = analysis.documents.find((entry) => entry.path === "concepts/revenue.md");
+  assert.ok(document);
+  const extensions = documentExtensions(document);
+
+  assert.equal(extensions.okf_type, "Metric");
+  assert.equal(extensions.okf_type, document.derived.type);
+  assert.deepEqual(extensions.usageWindow, { from: "2026-06-01", to: "2026-06-30" });
+  assert.deepEqual(extensions.sourceUsageWindows, [
+    null,
+    { from: "2026-01-01", to: "2026-03-31" },
+  ]);
+  assert.equal(extensions.sourceUsageWindows.length, document.derived.sources.length);
+  assert.deepEqual(analysis.diagnostics.guidance, []);
+});
+
+test("a document with no type or windows projects nulls rather than guessing", () => {
+  const { document } = parseBundleDocument({
+    path: "concepts/plain.md",
+    content: "---\ntitle: Plain\n---\n\n# Plain\n",
+  });
+
+  assert.deepEqual(documentExtensions(document), {
+    path: "concepts/plain.md",
+    okf_type: null,
+    usageWindow: null,
+    sourceUsageWindows: [],
+  });
+});
+
+test("a malformed usage window bound is reported, shared and per source", () => {
+  const guidance = analyzeBundle([
+    { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+    {
+      path: "concepts/bad-window.md",
+      content: `---
+type: Metric
+title: Bad windows
+description: Both windows are malformed.
+usage_window: { from: "2026-6-1", to: "2026-06-30" }
+sources:
+  - resource: https://example.com/source
+    usage_count: 4
+    usage_window: last quarter
+---
+
+# Bad windows
+`,
+    },
+  ]).diagnostics.guidance;
+
+  const shared = guidance.find((entry) => entry.code === "guidance.usage-window.from");
+  assert.ok(shared, "a malformed shared bound must be reported");
+  assert.equal(shared!.severity, "warning");
+  assert.match(shared!.message, /^usage_window\.from should be YYYY-MM-DD$/);
+
+  const perEntry = guidance.find((entry) => entry.code === "guidance.source.usage-window.type");
+  assert.ok(perEntry, "a per-entry window that is not a mapping must be reported");
+  assert.equal(perEntry!.severity, "warning");
+  assert.match(perEntry!.message, /^sources\[0\]\.usage_window should be a mapping$/);
+
+  assert.ok(!guidance.some((entry) => entry.code === "guidance.usage-window.to"));
+});
+
+test("well-formed usage windows stay silent", () => {
+  const codes = analyzeBundle([
+    { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+    {
+      path: "concepts/good-window.md",
+      content: `---
+type: Metric
+title: Good windows
+description: Both windows are well formed.
+usage_window: { from: "2026-06-01", to: "2026-06-30" }
+sources:
+  - resource: https://example.com/source
+    usage_count: 4
+    usage_window: { from: "2026-01-01", to: "2026-03-31" }
+---
+
+# Good windows
+`,
+    },
+  ]).diagnostics.guidance.map((entry) => entry.code);
+
+  for (const code of [
+    "guidance.usage-window.type",
+    "guidance.usage-window.from",
+    "guidance.usage-window.to",
+    "guidance.source.usage-window.type",
+    "guidance.source.usage-window.from",
+    "guidance.source.usage-window.to",
+  ]) {
+    assert.ok(!codes.includes(code), `${code} should not fire on a well-formed window`);
+  }
+});
+
+test("a perishable page with no expiry date is reported", () => {
+  const { diagnostics } = parseBundleDocument({
+    path: "concepts/plans.md",
+    content: `---
+type: Reference
+title: Plan pricing
+description: What each plan costs.
+tags: [pricing, finance, vendor-limits]
+---
+
+# Plan pricing
+`,
+  });
+
+  const perishable = diagnostics.guidance.find(
+    (entry) => entry.code === "guidance.stale-after.perishable",
+  );
+  assert.ok(perishable, "a perishable page with no stale_after must be reported");
+  assert.equal(perishable!.severity, "warning");
+  assert.equal(perishable!.family, "guidance");
+  assert.match(perishable!.message, /^tags pricing, vendor-limits perish/);
+});
+
+test("a perishable page that declares an expiry date stays silent", () => {
+  const codes = parseBundleDocument({
+    path: "concepts/plans.md",
+    content: `---
+type: Reference
+title: Plan pricing
+description: What each plan costs.
+tags: [pricing]
+stale_after: "2026-12-31"
+---
+
+# Plan pricing
+`,
+  }).diagnostics.guidance.map((entry) => entry.code);
+
+  assert.ok(!codes.includes("guidance.stale-after.perishable"));
+});
+
+test("an untagged page is never asked for an expiry date", () => {
+  const codes = parseBundleDocument({
+    path: "concepts/glossary.md",
+    content: "---\ntype: Reference\ntitle: Glossary\ndescription: Words.\ntags: [finance]\n---\n\n# Glossary\n",
+  }).diagnostics.guidance.map((entry) => entry.code);
+
+  assert.ok(!codes.includes("guidance.stale-after.perishable"));
 });

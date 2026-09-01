@@ -57,12 +57,26 @@ export interface VisualizationLink {
   readonly pending: boolean;
 }
 
+/**
+ * Who produced the current content, read from the `generated.by` actor grammar okf-core
+ * validates: `human:<id>`, `process:<id>`, or `<producer>/<version>`. `unknown` covers both an
+ * absent `generated` and a value that fits none of the three, so silence never reads as a person.
+ */
+export type AuthorKind = "human" | "agent" | "process" | "unknown";
+
 export interface VisualizationNode {
   /** Canonical graph identity from `okf.inspect.v1`. */
   readonly id: string;
   readonly path: string;
   readonly title: string;
   readonly type: string;
+  /**
+   * The cytoscape node shape standing for `type`. Decided here rather than in the browser so
+   * one build always draws one bundle the same way, and so the mapping is testable.
+   */
+  readonly shape: string;
+  /** Derived from `generated.by`; drawn as a border treatment, since fill already carries type. */
+  readonly authorKind: AuthorKind;
   readonly description: string;
   readonly status: string;
   /** Derived from `verified` by okf-core; the viz never re-derives it. */
@@ -94,6 +108,11 @@ export interface VisualizationEdge {
   readonly source: string;
   readonly target: string;
   readonly relation: "link" | "source" | "pending";
+  /**
+   * True when the target page is an `Attested Computation`. Kept beside `relation` rather than
+   * replacing it, so an edge can be both a citation and a reliance on a sanctioned computation.
+   */
+  readonly attested: boolean;
 }
 
 export interface VisualizationGraph {
@@ -123,6 +142,65 @@ const PENDING_COLOR = "#94a3b8";
 
 /** Trust is ordinal, so its filter is ranked rather than sorted by code point. */
 const TRUST_RANK: readonly TrustTier[] = ["human-reviewed", "machine-confirmed", "unverified"];
+
+/** The type name OKF gives a page whose value may only be produced by a sanctioned run. */
+const ATTESTED = "Attested Computation";
+
+const DEFAULT_SHAPE = "ellipse";
+
+/**
+ * One shape per OKF type, so a reader tells a decision from a runbook without reading a label
+ * or matching a shade. Keys are normalized (see `shapeKey`), which is what lets `ProjectBrief`,
+ * `Project Brief` and `project-brief` agree instead of drifting into two shapes.
+ *
+ * `Attested Computation` takes the star deliberately: it is the one type whose presence changes
+ * what a reader is allowed to do, so it must be findable at a glance across a crowded graph.
+ */
+const SHAPES: Readonly<Record<string, string>> = {
+  "attested computation": "star",
+  "decision": "diamond",
+  "policy": "hexagon",
+  "runbook": "round-rectangle",
+  "guide": "rhomboid",
+  "project": "tag",
+  "project brief": "tag",
+  "concept": "ellipse",
+  "organization": "pentagon",
+  "organisation": "pentagon",
+  "service": "barrel",
+  "metric": "triangle",
+  "index": "octagon",
+  "pending": "ellipse",
+};
+
+/**
+ * Fold a written type name onto its lookup key. The camel-case split runs first, so a one-word
+ * `ProjectBrief` becomes the same key as the two-word spelling rather than missing the map.
+ */
+function shapeKey(type: string): string {
+  return type
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** An unmapped type keeps the neutral ellipse; an unknown type must not borrow another's shape. */
+function shapeOf(type: string): string {
+  return SHAPES[shapeKey(type)] ?? DEFAULT_SHAPE;
+}
+
+/**
+ * Read the actor grammar okf-core validates. Only the two reserved prefixes name a person or a
+ * process; `<producer>/<version>` names an agent. Anything else is unknown rather than guessed.
+ */
+function authorKindOf(generated: VisualizationActorEvent | null): AuthorKind {
+  const by = generated?.by;
+  if (!by) return "unknown";
+  if (by.startsWith("human:")) return "human";
+  if (by.startsWith("process:")) return "process";
+  return /^[^\s/:]+\/[^\s/:]+$/.test(by) ? "agent" : "unknown";
+}
 
 /** Code-point ordering is deterministic across hosts; locale ordering is not. */
 function byCodePoint(left: string, right: string): number {
@@ -270,11 +348,14 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
   const nodes = orderedNodes.map((node): VisualizationNode => {
     const document = documentByPath.get(node.path);
     const body = document?.body ?? "";
+    const generated = actorEvents(document?.metadata["generated"])[0] ?? null;
     return {
       id: node.id,
       path: node.path,
       title: node.title,
       type: node.type,
+      shape: shapeOf(node.type),
+      authorKind: authorKindOf(generated),
       description: node.description ?? "",
       status: node.status,
       trustTier: node.trustTier,
@@ -282,7 +363,7 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
       // `staleAfter` is on the document's derived fields rather than the graph node.
       staleAfter: document?.derived.staleAfter ?? null,
       tags: node.tags,
-      generated: actorEvents(document?.metadata["generated"])[0] ?? null,
+      generated,
       verified: actorEvents(document?.metadata["verified"]),
       usageWindow: usageWindowOf(document?.metadata["usage_window"]),
       resource: text(document?.metadata["resource"]),
@@ -312,6 +393,9 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
     path,
     title: path.split("/").at(-1)?.replace(/\.md$/i, "") ?? path,
     type: "Pending",
+    shape: DEFAULT_SHAPE,
+    // Nobody has written it, so nobody authored it. The page draws its own faded treatment.
+    authorKind: "unknown",
     description: "This page is linked to but has not been written yet.",
     status: "",
     trustTier: "unverified",
@@ -330,6 +414,12 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
     size: 20,
     pending: true,
   }));
+
+  // Which pages are sanctioned computations, so an edge can say that it leans on one. A pending
+  // placeholder is never in this set: an unwritten page has declared no contract.
+  const attestedIds = new Set(
+    orderedNodes.filter((node) => node.type === ATTESTED).map((node) => node.id),
+  );
 
   const seen = new Set<string>();
   const edges: VisualizationEdge[] = [];
@@ -351,6 +441,7 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
       source: edge.source,
       target: edge.target,
       relation: edge.relation,
+      attested: attestedIds.has(edge.target),
     });
   }
 
@@ -362,7 +453,13 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
       const key = `${node.id}\u0000${target}\u0000pending`;
       if (seen.has(key)) continue;
       seen.add(key);
-      edges.push({ id: `e${edges.length}`, source: node.id, target, relation: "pending" });
+      edges.push({
+        id: `e${edges.length}`,
+        source: node.id,
+        target,
+        relation: "pending",
+        attested: false,
+      });
     }
   }
 

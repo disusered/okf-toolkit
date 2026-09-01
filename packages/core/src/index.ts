@@ -1,5 +1,6 @@
 export { analyzeBundle, parseBundleDocument } from "./analyze.js";
 export { canonicalChangeJson, parseChange } from "./changes.js";
+export { documentExtensions } from "./derive.js";
 export { buildGraph } from "./graph.js";
 export { extractMarkdownLinks } from "./links.js";
 export type { ExtractLinksOptions } from "./links.js";

@@ -1,8 +1,11 @@
 import type {
+  AnalyzedDocument,
   AnalyzedSource,
   DerivedDocumentFields,
   Diagnostic,
+  DocumentExtensions,
   TrustTier,
+  UsageWindow,
 } from "okf-contracts";
 
 import { diagnostic } from "./diagnostics.js";
@@ -13,6 +16,17 @@ const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATETIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
 const ACTOR = /^(?:human:[^\s/:]+|process:[^\s/:]+|[^\s/:]+\/[^\s/:]+)$/;
 const VALID_STATUSES = new Set(["draft", "stable", "deprecated"]);
+/**
+ * Tags that mark a page as perishable, so it should say when it goes stale. Edit this set to
+ * match what a bundle actually tags; it only catches pages someone remembered to tag.
+ */
+const PERISHABLE_TAGS: ReadonlySet<string> = new Set([
+  "pricing",
+  "vendor-limits",
+  "product-version",
+  "agreement",
+  "engagement-terms",
+]);
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 
 function nonempty(value: unknown): string | null {
@@ -77,6 +91,11 @@ function trustTier(metadata: Readonly<Record<string, unknown>>): TrustTier {
   return machine ? "machine-confirmed" : "unverified";
 }
 
+/** The `sources` entries `sourceFields` keeps; anything else never reaches `derived.sources`. */
+function isUsableSourceEntry(entry: unknown): entry is Record<string, unknown> {
+  return mapping(entry) && nonempty(entry["resource"]) !== null;
+}
+
 function sourceFields(
   value: unknown,
   path: string,
@@ -112,6 +131,13 @@ function sourceFields(
       );
       return;
     }
+    checkUsageWindow(
+      entry["usage_window"],
+      path,
+      `sources[${index}].usage_window`,
+      "guidance.source.usage-window",
+      guidance,
+    );
 
     let resolvedPath: string | null = null;
     let exists: boolean | null = null;
@@ -269,7 +295,7 @@ function checkTrustAndLifecycle(
     );
   }
 
-  checkUsageWindow(metadata["usage_window"], path, "usage_window", guidance);
+  checkUsageWindow(metadata["usage_window"], path, "usage_window", "guidance.usage-window", guidance);
   checkAttestationContract(metadata, path, guidance);
 }
 
@@ -278,6 +304,7 @@ function checkUsageWindow(
   value: unknown,
   path: string,
   label: string,
+  code: string,
   guidance: Diagnostic[],
 ): void {
   if (value === undefined) {
@@ -285,7 +312,7 @@ function checkUsageWindow(
   }
   if (!mapping(value)) {
     guidance.push(
-      diagnostic("guidance", "warning", "guidance.usage-window.type", path, `${label} should be a mapping`),
+      diagnostic("guidance", "warning", `${code}.type`, path, `${label} should be a mapping`),
     );
     return;
   }
@@ -296,7 +323,7 @@ function checkUsageWindow(
         diagnostic(
           "guidance",
           "warning",
-          `guidance.usage-window.${key}`,
+          `${code}.${key}`,
           path,
           `${label}.${key} should be YYYY-MM-DD`,
         ),
@@ -415,6 +442,20 @@ export function deriveDocumentFields(
   }
 
   const staleAfter = nonempty(metadata["stale_after"]);
+  if (staleAfter === null) {
+    const perishable = [...new Set(tags.filter((tag) => PERISHABLE_TAGS.has(tag)))].sort();
+    if (perishable.length > 0) {
+      guidance.push(
+        diagnostic(
+          "guidance",
+          "warning",
+          "guidance.stale-after.perishable",
+          path,
+          `tags ${perishable.join(", ")} perish, so stale_after should be set`,
+        ),
+      );
+    }
+  }
   const validStaleAfter = staleAfter !== null && validDate(staleAfter) ? staleAfter : null;
   const validToday = today !== null && validDate(today) ? today : null;
   const statusValue = nonempty(metadata["status"]);
@@ -491,4 +532,40 @@ function checkContractPaths(
       );
     }
   }
+}
+
+
+function usageWindowOf(value: unknown): UsageWindow | null {
+  const record = asMapping(value);
+  if (record === null) {
+    return null;
+  }
+  const from = nonempty(record["from"]);
+  const to = nonempty(record["to"]);
+  return from === null && to === null ? null : { from, to };
+}
+
+/**
+ * Project the derived fields `okf.inspect.v1` cannot carry. `okf_type` is the document's OKF
+ * type under the name a catalog predicate matches on, and the usage windows frame every
+ * `usage_count` the analysis already reports. Both are derived from the same frontmatter the
+ * analysis read, so a consumer reads them here instead of re-deriving them itself.
+ */
+export function documentExtensions(document: AnalyzedDocument): DocumentExtensions {
+  const metadata = document.metadata;
+  const sourceUsageWindows: (UsageWindow | null)[] = [];
+  const sources = metadata["sources"];
+  if (Array.isArray(sources)) {
+    for (const entry of sources) {
+      if (isUsableSourceEntry(entry)) {
+        sourceUsageWindows.push(usageWindowOf(entry["usage_window"]));
+      }
+    }
+  }
+  return {
+    path: document.path,
+    okf_type: nonempty(metadata["type"]),
+    usageWindow: usageWindowOf(metadata["usage_window"]),
+    sourceUsageWindows,
+  };
 }

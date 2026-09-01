@@ -183,6 +183,7 @@ test("preserves canonical graph relations and distinguishes source edges", () =>
       source: "index.md",
       target: "concepts/one.md",
       relation: "source",
+      attested: false,
     },
   ]);
   assert.match(
@@ -338,6 +339,9 @@ test("a link to an unwritten page becomes a pending node rather than vanishing",
   assert.equal(pending?.path, "concepts/later.md", "pending node keys on the resolved path");
   assert.equal(pending?.id, "pending:concepts/later.md");
   assert.equal(pending?.type, "Pending");
+  // Nobody wrote it, so it claims neither a type shape nor an author.
+  assert.equal(pending?.shape, "ellipse");
+  assert.equal(pending?.authorKind, "unknown");
   assert.ok(graph.edges.some((entry) => entry.relation === "pending"));
   // The pending placeholder must not pollute the authored facets.
   assert.ok(!graph.types.includes("Pending"));
@@ -401,9 +405,17 @@ test("the reader is laid out beside the graph and can still scroll", () => {
   assert.ok(html.indexOf('id="graph"') < html.indexOf('id="split"'));
   assert.ok(html.indexOf('id="split"') < html.indexOf('id="detail"'));
   assert.match(html, /main \{ display: flex; flex-direction: row;/);
-  // The graph carries structure and type only; state is read from the metadata table.
+  // The graph draws type, authorship and trust; it still carries no legend row, because the
+  // reader's metadata table is where a signal gets named in words rather than in a key.
   assert.ok(!html.includes('id="legend"'), "no legend row");
-  assert.ok(!html.includes("node.human"), "no trust encoding on nodes");
+  assert.match(html, /selector: "node\.author-human"/);
+  assert.match(html, /selector: "node\.unchecked"/);
+  // Cytoscape resolves conflicts by array order and the last rule wins. Stale must therefore
+  // follow both fading rules, and every new rule must precede selection and filtering.
+  assert.ok(html.indexOf('"node.unchecked"') < html.indexOf('"node.stale"'), "stale beats dimming");
+  assert.ok(html.indexOf('"node.deprecated"') < html.indexOf('"node.stale"'), "stale beats dimming");
+  assert.ok(html.indexOf('"node.stale"') < html.indexOf('"node:selected"'), "selection still draws");
+  assert.ok(html.indexOf('"node:selected"') < html.indexOf('".dim"'), "filtering still draws");
   assert.match(html, /main\[data-orientation="rows"\] \{ flex-direction: column; \}/);
   assert.match(html, /#detail \{[^}]*min-height: 0;[^}]*overflow-y: auto;/s);
 });
@@ -564,4 +576,197 @@ test("the panel offers a verification row and a computation section", () => {
   assert.match(html, /id="detail-computation"/);
   // The collapsed one-word row it replaced is gone.
   assert.ok(!html.includes('id="detail-trust"'));
+});
+
+test("each type gets its own shape, and an unmapped type falls back to an ellipse", () => {
+  const expected: readonly (readonly [string, string])[] = [
+    ["Attested Computation", "star"],
+    ["Decision", "diamond"],
+    ["Policy", "hexagon"],
+    ["Runbook", "round-rectangle"],
+    ["Guide", "rhomboid"],
+    ["Project", "tag"],
+    // The one-word spelling folds onto the same key, rather than drifting to a second shape.
+    ["ProjectBrief", "tag"],
+    ["Concept", "ellipse"],
+    ["Organization", "pentagon"],
+    ["Service", "barrel"],
+    ["Metric", "triangle"],
+    ["Index", "octagon"],
+    // Nothing in the map: the neutral ellipse, never another type's shape.
+    ["Ephemeris", "ellipse"],
+  ];
+
+  for (const [type, shape] of expected) {
+    const graph = toVisualizationGraph(analysis(
+      [provenanceDocument("concepts/a.md", { type })],
+      [signalNode("concepts/a.md", { type })],
+      [],
+    ));
+    assert.equal(graph.nodes[0]?.shape, shape, type);
+  }
+
+  // The shape is decided in the projection, so the browser reads it rather than deciding it.
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(
+      [provenanceDocument("concepts/c.md", { type: "Attested Computation" })],
+      [signalNode("concepts/c.md", { type: "Attested Computation" })],
+      [],
+    ),
+  });
+  assert.match(html, /"shape":"star"/);
+  assert.match(html, /"shape": "data\(shape\)"/);
+});
+
+test("who wrote a page is classified from the actor grammar, never guessed", () => {
+  const expected: readonly (readonly [Record<string, unknown> | null, string])[] = [
+    [{ by: "human:carlos", at: "2026-08-01T10:00:00Z" }, "human"],
+    [{ by: "process:nightly", at: "2026-08-01T10:00:00Z" }, "process"],
+    [{ by: "agent/1.0", at: "2026-08-01T10:00:00Z" }, "agent"],
+    [null, "unknown"],
+    // A bare name fits none of the three shapes, so it stays unknown rather than reading
+    // as a person. Claiming a human wrote something is the one error worth refusing to make.
+    [{ by: "carlos" }, "unknown"],
+  ];
+
+  for (const [generated, authorKind] of expected) {
+    const metadata: Record<string, unknown> = { type: "Concept" };
+    if (generated) metadata["generated"] = generated;
+    const graph = toVisualizationGraph(analysis(
+      [provenanceDocument("concepts/a.md", metadata)],
+      [signalNode("concepts/a.md", {})],
+      [],
+    ));
+    assert.equal(graph.nodes[0]?.authorKind, authorKind, JSON.stringify(generated));
+  }
+});
+
+test("a link to an Attested Computation is drawn as its own kind of edge", () => {
+  const documents = [
+    provenanceDocument("concepts/a.md", { type: "Concept" }),
+    provenanceDocument("concepts/c.md", { type: "Attested Computation" }),
+  ];
+  const nodes = [
+    signalNode("concepts/a.md", {}),
+    signalNode("concepts/c.md", { type: "Attested Computation" }),
+  ];
+  const edges = [
+    edge("concepts/a.md", "concepts/c.md", "leans-on"),
+    edge("concepts/c.md", "concepts/a.md", "cites-back"),
+  ];
+  const graph = toVisualizationGraph(analysis(documents, nodes, edges));
+  const intoComputation = graph.edges.find((entry) => entry.target === "concepts/c.md");
+  const outOfComputation = graph.edges.find((entry) => entry.target === "concepts/a.md");
+
+  assert.equal(intoComputation?.attested, true);
+  // Direction is the whole point: leaving the computation is an ordinary link.
+  assert.equal(outOfComputation?.attested, false);
+  // The flag sits beside the relation rather than replacing it, so a cited computation is
+  // still recognisable as a citation.
+  assert.equal(intoComputation?.relation, "link");
+
+  const html = generateVisualization({ bundle: "b", analysis: analysis(documents, nodes, edges) });
+  assert.match(html, /selector: "edge\.attested"/);
+  assert.ok(html.indexOf('"edge.attested"') < html.indexOf('"edge:selected"'));
+});
+
+test("hovering a node describes it without taking over the selection", () => {
+  assert.match(PAGE_SCRIPT, /cy\.on\("mouseover", "node"/);
+  assert.match(PAGE_SCRIPT, /function showHover\(node, rendered\)/);
+  // The card is assembled, never parsed: a title that looks like markup stays text.
+  assert.match(PAGE_SCRIPT, /hoverCard\.replaceChildren\(\)/);
+  assert.ok(!PAGE_SCRIPT.includes("hoverCard.innerHTML"));
+  assert.equal((PAGE_SCRIPT.match(/\.innerHTML\s*=/g) ?? []).length, 1);
+  // showHover must not select: hovering answers a question, it does not replace the answer
+  // the reader is already looking at.
+  const hover = PAGE_SCRIPT.slice(PAGE_SCRIPT.indexOf("function showHover"));
+  assert.ok(!hover.slice(0, hover.indexOf("cy.on(\"mouseout\"")).includes(".select()"));
+});
+
+test("the dated strip ships hidden, above the table it summarises", () => {
+  const documents = [provenanceDocument("concepts/a.md", { type: "Concept" })];
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(documents, [signalNode("concepts/a.md", {})], []),
+  });
+  assert.match(html, /<section id="detail-timeline"[^>]*\bhidden>/);
+  assert.match(html, /id="timeline-marks"/);
+  assert.match(html, /id="timeline-overrun"/);
+  // The strip belongs with the page identity, above the metadata it condenses.
+  assert.ok(html.indexOf('id="detail-path"') < html.indexOf('id="detail-timeline"'));
+  assert.ok(html.indexOf('id="detail-timeline"') < html.indexOf("<dl>"));
+});
+
+test("a page with no dates leaves the strip with nothing to draw", () => {
+  const documents = [provenanceDocument("concepts/a.md", { type: "Concept" })];
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(documents, [signalNode("concepts/a.md", {})], []),
+  });
+  // Nothing is dated, so the script finds no event and the markup's hidden attribute stands.
+  assert.match(html, /"generated":null/);
+  assert.match(html, /"verified":\[\]/);
+  assert.match(html, /"staleAfter":null/);
+  assert.match(PAGE_SCRIPT, /timelineSection\.hidden = !events\.length;/);
+  // An explicit display rule on the section would silently defeat that attribute.
+  assert.match(PAGE_STYLE, /#detail-timeline \{ margin: 0 0 18px; \}/);
+  assert.match(PAGE_STYLE, /\[hidden\] \{ display: none !important; \}/);
+});
+
+test("an expired page draws the overrun between its expiry and the evaluation date", () => {
+  const documents = [signalDocument("concepts/a.md", "2026-01-01")];
+  const nodes = [signalNode("concepts/a.md", { stale: true })];
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(documents, nodes, []),
+    evaluatedAt: "2026-08-31",
+  });
+  assert.match(html, /"staleAfter":"2026-01-01"/);
+  assert.match(html, /"evaluatedAt":"2026-08-31"/);
+  // Geometry: the overrun spans expiry to today, and says how far past in words.
+  assert.match(PAGE_SCRIPT, /timelineOverrun\.style\.left = left \+ "%";/);
+  assert.match(PAGE_SCRIPT, /timelineOverrun\.hidden = false;/);
+  assert.match(PAGE_SCRIPT, /past its stale-after date/);
+  // Hatched, so the overrun still reads where the accent colour does not.
+  assert.match(PAGE_STYLE, /\.timeline-overrun \{/);
+  assert.match(PAGE_STYLE, /repeating-linear-gradient/);
+});
+
+test("source usage is drawn as a bar scaled to the busiest source on the page", () => {
+  const documents = [provenanceDocument("concepts/a.md", { type: "Concept", usage_window: { from: "2026-06-01", to: "2026-06-30" } }, [
+    {
+      id: "policy",
+      resource: "https://example.com/policy",
+      title: "Revenue policy",
+      author: "human:jordi",
+      usageCount: 5000,
+      lastModified: "2026-06-15",
+      resolvedPath: null,
+      exists: null,
+    },
+    {
+      id: "warehouse",
+      resource: "https://example.com/warehouse",
+      title: "Warehouse schema",
+      author: null,
+      usageCount: 1240,
+      lastModified: null,
+      resolvedPath: null,
+      exists: null,
+    },
+  ])];
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(documents, [signalNode("concepts/a.md", {})], []),
+  });
+  assert.match(html, /"usageCount":5000/);
+  assert.match(html, /"usageWindow":\{"from":"2026-06-01","to":"2026-06-30"\}/);
+  // Proportional to the largest count on the page, never to a bundle-wide maximum.
+  assert.match(PAGE_SCRIPT, /fill\.style\.width = \(\(source\.usageCount \/ largest\) \* 100\) \+ "%";/);
+  assert.match(PAGE_SCRIPT, /source\.usageCount !== null && source\.usageCount > largest/);
+  // The window is a property of the measurement, so it is stated once for the whole list.
+  assert.match(PAGE_SCRIPT, /sourcesEl\.appendChild\(caption\);/);
+  assert.match(PAGE_STYLE, /\.usage-bar \{/);
+  assert.match(PAGE_STYLE, /\.usage-fill \{/);
 });

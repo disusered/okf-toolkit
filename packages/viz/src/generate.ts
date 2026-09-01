@@ -168,6 +168,14 @@ export function generateVisualization(input: VisualizationInput): string {
       <span class="chip warn" id="detail-flag" hidden></span>
       <h1 id="detail-title"></h1>
       <p class="path" id="detail-path"></p>
+      <section id="detail-timeline" aria-label="Recorded dates for this page" hidden>
+        <div class="timeline">
+          <div class="timeline-track"></div>
+          <div class="timeline-overrun" id="timeline-overrun" hidden></div>
+          <div class="timeline-marks" id="timeline-marks"></div>
+        </div>
+        <p class="timeline-note" id="timeline-note" hidden></p>
+      </section>
       <dl>
         <dt>Description</dt><dd id="detail-description"></dd>
         <dt>Status</dt><dd id="detail-status"></dd>
