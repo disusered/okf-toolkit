@@ -6,10 +6,44 @@ import type {
   TrustTier,
 } from "okf-contracts";
 
-/** A source shown in the reader panel. */
+/**
+ * A source shown in the reader panel, carrying the credibility signals OKF records so a
+ * reader can judge the concept by judging what it came from. `title` stays null when the
+ * source has none, so an untitled source is distinguishable from one named after its URL.
+ */
 export interface VisualizationSource {
-  readonly title: string;
+  readonly id: string | null;
   readonly resource: string;
+  readonly title: string | null;
+  readonly author: string | null;
+  readonly usageCount: number | null;
+  readonly lastModified: string | null;
+  /** Bundle path when the resource points inside the bundle, else null. */
+  readonly resolvedPath: string | null;
+  /** False when an in-bundle resource names a page nobody has written. */
+  readonly exists: boolean | null;
+}
+
+/** One recorded act: who did it and when. Used for both `generated` and `verified`. */
+export interface VisualizationActorEvent {
+  readonly by: string;
+  readonly at: string | null;
+}
+
+/** The period a source `usage_count` was measured over. */
+export interface VisualizationUsageWindow {
+  readonly from: string | null;
+  readonly to: string | null;
+}
+
+/** The contract fields of an `Attested Computation` concept. */
+export interface VisualizationAttestation {
+  readonly runtime: string | null;
+  readonly parameters: readonly { readonly name: string; readonly type: string | null; readonly required: boolean | null }[];
+  readonly computation: string | null;
+  readonly executorResource: string | null;
+  readonly executorReceipt: readonly string[];
+  readonly attesterResource: string | null;
 }
 
 /**
@@ -37,6 +71,15 @@ export interface VisualizationNode {
   readonly stale: boolean | null;
   readonly staleAfter: string | null;
   readonly tags: readonly string[];
+  /** Who produced the current content, from `generated`. */
+  readonly generated: VisualizationActorEvent | null;
+  /** Every recorded check, newest last. `trustTier` is the conclusion drawn from these. */
+  readonly verified: readonly VisualizationActorEvent[];
+  /** The period every source `usageCount` was measured over. */
+  readonly usageWindow: VisualizationUsageWindow | null;
+  /** The concept's own canonical URI, when it names one. */
+  readonly resource: string | null;
+  readonly attestation: VisualizationAttestation | null;
   readonly sources: readonly VisualizationSource[];
   readonly links: readonly VisualizationLink[];
   readonly body: string;
@@ -113,17 +156,87 @@ function linksOf(document: AnalyzedDocument | undefined): VisualizationLink[] {
   return links;
 }
 
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function mapping(value: unknown): Readonly<Record<string, unknown>> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : null;
+}
+
+/**
+ * Read a list of recorded acts. The spec allows a single event to be written as a bare
+ * mapping without the list dash and requires consumers to treat it as a one-element list.
+ */
+function actorEvents(value: unknown): VisualizationActorEvent[] {
+  const entries = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  const events: VisualizationActorEvent[] = [];
+  for (const entry of entries) {
+    const record = mapping(entry);
+    const by = record && text(record["by"]);
+    if (!by) continue;
+    events.push({ by, at: record ? text(record["at"]) : null });
+  }
+  return events;
+}
+
+function usageWindowOf(value: unknown): VisualizationUsageWindow | null {
+  const record = mapping(value);
+  if (!record) return null;
+  const from = text(record["from"]);
+  const to = text(record["to"]);
+  return from === null && to === null ? null : { from, to };
+}
+
+/** Present only for a concept whose type is `Attested Computation`. */
+function attestationOf(
+  metadata: Readonly<Record<string, unknown>>,
+): VisualizationAttestation | null {
+  if (metadata["type"] !== "Attested Computation") return null;
+  const executor = mapping(metadata["executor"]);
+  const receipt = executor && Array.isArray(executor["receipt"]) ? executor["receipt"] : [];
+  const rawParameters = Array.isArray(metadata["parameters"]) ? metadata["parameters"] : [];
+  return {
+    runtime: text(metadata["runtime"]),
+    parameters: rawParameters.flatMap((entry) => {
+      const record = mapping(entry);
+      const name = record && text(record["name"]);
+      if (!name) return [];
+      return [{
+        name,
+        type: record ? text(record["type"]) : null,
+        required: record && typeof record["required"] === "boolean" ? record["required"] : null,
+      }];
+    }),
+    computation: text(metadata["computation"]),
+    executorResource: executor ? text(executor["resource"]) : null,
+    executorReceipt: receipt.flatMap((entry) => {
+      const value = text(entry);
+      return value ? [value] : [];
+    }),
+    attesterResource: text(mapping(metadata["attester"])?.["resource"]),
+  };
+}
+
 function sourcesOf(document: AnalyzedDocument | undefined): VisualizationSource[] {
   if (!document) {
     return [];
   }
   return document.derived.sources
     .map((source) => ({
-      title: source.title?.trim() || source.resource,
+      id: source.id,
       resource: source.resource,
+      title: source.title?.trim() || null,
+      author: source.author,
+      usageCount: source.usageCount,
+      lastModified: source.lastModified,
+      resolvedPath: source.resolvedPath,
+      exists: source.exists,
     }))
     .sort((left, right) =>
-      byCodePoint(`${left.resource}\u0000${left.title}`, `${right.resource}\u0000${right.title}`),
+      byCodePoint(`${left.resource}\u0000${left.title ?? ""}`, `${right.resource}\u0000${right.title ?? ""}`),
     );
 }
 
@@ -169,6 +282,11 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
       // `staleAfter` is on the document's derived fields rather than the graph node.
       staleAfter: document?.derived.staleAfter ?? null,
       tags: node.tags,
+      generated: actorEvents(document?.metadata["generated"])[0] ?? null,
+      verified: actorEvents(document?.metadata["verified"]),
+      usageWindow: usageWindowOf(document?.metadata["usage_window"]),
+      resource: text(document?.metadata["resource"]),
+      attestation: document ? attestationOf(document.metadata) : null,
       sources: sourcesOf(document),
       links: linksOf(document),
       body,
@@ -200,6 +318,11 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
     stale: null,
     staleAfter: null,
     tags: [],
+    generated: null,
+    verified: [],
+    usageWindow: null,
+    resource: null,
+    attestation: null,
     sources: [],
     links: [],
     body: "",

@@ -189,6 +189,16 @@ ul.plain .muted { display: block; font-family: ui-monospace, SFMono-Regular, Men
 
 .chip.warn { background: var(--accent); margin-left: 6px; }
 
+.actor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.warn-text { color: var(--accent); }
+
+/* Source and verification entries stack their signals under the label. */
+#detail-sources .muted, #detail-verified .muted { display: block; }
+#detail-verified ul { margin-bottom: 4px; }
+
+#detail-computation h2 { margin-top: 22px; }
+#detail-computation p { margin: 0 0 8px; }
+
 .tag {
   font: inherit;
   font-size: 11px;

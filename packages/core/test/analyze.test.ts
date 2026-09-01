@@ -245,3 +245,96 @@ test("duplicate paths are a deterministic bundle error", () => {
   ]);
   assert.equal(analysis.diagnostics.core.at(-1)?.code, "core.bundle.path.duplicate");
 });
+
+test("the attested computation contract is validated, not just its runtime", () => {
+  const codes = analyzeBundle([
+    { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+    {
+      path: "concepts/bad.md",
+      content: `---
+type: Attested Computation
+title: Bad contract
+description: Every contract field is malformed.
+runtime: bigquery
+parameters:
+  - { type: integer }
+executor: "not a mapping"
+attester: { resource: "" }
+usage_window: { from: "2026-13-01", to: 2026 }
+---
+
+# Bad contract
+`,
+    },
+  ]).diagnostics.guidance.map((entry) => entry.code);
+
+  assert.ok(codes.includes("guidance.parameter.name"), "a parameter needs a name");
+  assert.ok(codes.includes("guidance.executor.type"), "executor must be a mapping");
+  assert.ok(codes.includes("guidance.attester.resource"), "attester needs a resource");
+  assert.ok(codes.includes("guidance.usage-window.from"), "usage_window bounds are dates");
+  assert.ok(codes.includes("guidance.usage-window.to"), "usage_window bounds are dates");
+});
+
+test("a well-formed contract is reported clean", () => {
+  const codes = analyzeBundle([
+    { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+    { path: "references/run.md", content: '---\ntype: Skill\ntitle: Run\ndescription: How to run it.\n---\n\n# Run\n' },
+    { path: "references/attest.md", content: '---\ntype: Skill\ntitle: Attest\ndescription: How to check it.\n---\n\n# Attest\n' },
+    {
+      path: "concepts/good.md",
+      content: `---
+type: Attested Computation
+title: Good contract
+description: A complete, well-formed contract.
+runtime: bigquery
+parameters:
+  - { name: year, type: integer, required: true }
+executor:
+  resource: /references/run.md
+  receipt: [job_id, executed_sql]
+attester:
+  resource: /references/attest.md
+usage_window: { from: "2026-06-01", to: "2026-06-30" }
+---
+
+# Good contract
+`,
+    },
+  ]).diagnostics.guidance.map((entry) => entry.code);
+
+  for (const code of [
+    "guidance.parameter.name",
+    "guidance.executor.type",
+    "guidance.executor.resource",
+    "guidance.executor.receipt",
+    "guidance.attester.resource",
+    "guidance.usage-window.from",
+    "guidance.contract.broken",
+  ]) {
+    assert.ok(!codes.includes(code), `${code} should not fire on a good contract`);
+  }
+});
+
+test("a contract path that names a page nobody wrote is reported", () => {
+  const diagnostics = analyzeBundle([
+    { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+    {
+      path: "concepts/broken.md",
+      content: `---
+type: Attested Computation
+title: Broken executor
+description: Points at a runner that does not exist.
+runtime: bigquery
+executor:
+  resource: /references/missing.md
+---
+
+# Broken executor
+`,
+    },
+  ]).diagnostics.guidance;
+
+  const broken = diagnostics.find((entry) => entry.code === "guidance.contract.broken");
+  assert.ok(broken, "a broken executor path must be reported");
+  assert.match(broken!.message, /executor\.resource does not resolve/);
+});

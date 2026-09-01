@@ -51,7 +51,12 @@ export const PAGE_SCRIPT = String.raw`
   var staleOnlyLabel = document.getElementById("stale-only-label");
   var layoutSelect = document.getElementById("layout");
   var orientationSelect = document.getElementById("orientation");
-  var trustEl = document.getElementById("detail-trust");
+  var verifiedEl = document.getElementById("detail-verified");
+  var generatedTerm = document.getElementById("dt-generated");
+  var generatedEl = document.getElementById("detail-generated");
+  var resourceTerm = document.getElementById("dt-resource");
+  var resourceEl = document.getElementById("detail-resource");
+  var computationSection = document.getElementById("detail-computation");
   var staleTerm = document.getElementById("dt-stale");
   var staleEl = document.getElementById("detail-stale");
   var tagsTerm = document.getElementById("dt-tags");
@@ -364,6 +369,16 @@ export const PAGE_SCRIPT = String.raw`
     });
   }
 
+  /** Show a definition row only when it has a value, keeping term and value in step. */
+  function setRow(termSuffix, valueId, value) {
+    var term = document.getElementById("dt-" + termSuffix);
+    var element = document.getElementById(valueId);
+    var shown = value !== null && value !== undefined && value !== "";
+    term.hidden = !shown;
+    element.hidden = !shown;
+    element.textContent = shown ? value : "";
+  }
+
   function clearSelection() {
     cy.elements().unselect();
     emptyEl.hidden = false;
@@ -388,9 +403,50 @@ export const PAGE_SCRIPT = String.raw`
     descriptionEl.textContent = node.description || "—";
     statusEl.textContent = node.status || (node.pending ? "not written yet" : "—");
 
-    // Trust is always shown. An absent row would read as an omission, and a reader must never
-    // be able to infer "verified" from silence.
-    trustEl.textContent = TRUST_LABEL[node.trustTier] || node.trustTier;
+    // Show the checks themselves, newest first, with the derived rating underneath as the
+    // conclusion drawn from them. The row is never hidden: silence must not read as approval.
+    verifiedEl.replaceChildren();
+    if (node.verified.length) {
+      var events = node.verified.slice().sort(function (a, b) {
+        return String(b.at || "").localeCompare(String(a.at || ""));
+      });
+      var list = document.createElement("ul");
+      list.className = "plain";
+      events.forEach(function (event) {
+        var item = document.createElement("li");
+        var who = document.createElement("span");
+        who.className = "actor";
+        who.textContent = event.by;
+        item.appendChild(who);
+        if (event.at) {
+          var when = document.createElement("span");
+          when.className = "muted";
+          when.textContent = " · " + event.at;
+          item.appendChild(when);
+        }
+        list.appendChild(item);
+      });
+      verifiedEl.appendChild(list);
+    } else {
+      var none = document.createElement("div");
+      none.textContent = "no verification recorded";
+      verifiedEl.appendChild(none);
+    }
+    var rating = document.createElement("div");
+    rating.className = "muted";
+    rating.textContent = TRUST_LABEL[node.trustTier] || node.trustTier;
+    verifiedEl.appendChild(rating);
+
+    generatedTerm.hidden = !node.generated;
+    generatedEl.hidden = !node.generated;
+    generatedEl.textContent = node.generated
+      ? node.generated.by + (node.generated.at ? " · " + node.generated.at : "")
+      : "";
+
+    resourceTerm.hidden = !node.resource;
+    resourceEl.hidden = !node.resource;
+    resourceEl.replaceChildren();
+    if (node.resource) { appendExternal(node.resource, node.resource, resourceEl); }
 
     var flag = node.pending ? "Pending" : node.stale === true ? "Stale"
       : node.status === "deprecated" ? "Deprecated" : "";
@@ -424,16 +480,82 @@ export const PAGE_SCRIPT = String.raw`
 
     sourcesEl.replaceChildren();
     if (node.sources.length) {
-      var list = document.createElement("ul");
-      list.className = "plain";
+      var sourceList = document.createElement("ul");
+      sourceList.className = "plain";
       node.sources.forEach(function (source) {
         var item = document.createElement("li");
-        appendExternal(source.resource, source.title, item);
-        list.appendChild(item);
+        var label = source.title || source.resource;
+
+        // A source pointing inside the bundle selects that page, the same as a body link.
+        // Only an http(s) resource leaves the document.
+        if (source.resolvedPath && source.exists) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "internal";
+          button.textContent = label;
+          button.addEventListener("click", function () { showNode(source.resolvedPath); });
+          item.appendChild(button);
+        } else {
+          appendExternal(source.resource, label, item);
+        }
+
+        if (!source.title) {
+          var untitled = document.createElement("span");
+          untitled.className = "muted";
+          untitled.textContent = " (untitled)";
+          item.appendChild(untitled);
+        }
+        if (source.exists === false) {
+          var missing = document.createElement("span");
+          missing.className = "warn-text";
+          missing.textContent = " — not written yet";
+          item.appendChild(missing);
+        }
+
+        // The credibility signals OKF records so a reader can judge the source itself.
+        var facts = [];
+        if (source.author) { facts.push("by " + source.author); }
+        if (source.usageCount !== null) {
+          var used = "used " + source.usageCount.toLocaleString() + " times";
+          if (node.usageWindow && (node.usageWindow.from || node.usageWindow.to)) {
+            used += " between " + (node.usageWindow.from || "?") + " and " + (node.usageWindow.to || "?");
+          }
+          facts.push(used);
+        }
+        if (source.lastModified) { facts.push("source last changed " + source.lastModified); }
+        if (source.id) { facts.push("cited as [^" + source.id + "]"); }
+        if (facts.length) {
+          var detail = document.createElement("span");
+          detail.className = "muted";
+          detail.textContent = facts.join(" · ");
+          item.appendChild(detail);
+        }
+        sourceList.appendChild(item);
       });
-      sourcesEl.appendChild(list);
+      sourcesEl.appendChild(sourceList);
     } else {
-      sourcesEl.textContent = "—";
+      sourcesEl.textContent = "none recorded";
+    }
+
+    // Only an Attested Computation carries a sanctioned way to produce its value.
+    var attestation = node.attestation;
+    computationSection.hidden = !attestation;
+    if (attestation) {
+      setRow("runtime", "comp-runtime", attestation.runtime);
+      setRow("computation", "comp-computation", attestation.computation);
+      setRow("executor", "comp-executor", attestation.executorResource);
+      setRow("attester", "comp-attester", attestation.attesterResource);
+      setRow("receipt", "comp-receipt", attestation.executorReceipt.join(", "));
+      setRow(
+        "parameters",
+        "comp-parameters",
+        attestation.parameters.map(function (parameter) {
+          var shown = parameter.name;
+          if (parameter.type) { shown += ": " + parameter.type; }
+          if (parameter.required === true) { shown += " (required)"; }
+          return shown;
+        }).join(", "),
+      );
     }
 
     bodyEl.replaceChildren();

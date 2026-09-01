@@ -171,11 +171,25 @@ export function generateVisualization(input: VisualizationInput): string {
       <dl>
         <dt>Description</dt><dd id="detail-description"></dd>
         <dt>Status</dt><dd id="detail-status"></dd>
-        <dt>Trust</dt><dd id="detail-trust"></dd>
+        <dt>Verification</dt><dd id="detail-verified"></dd>
+        <dt id="dt-generated" hidden>Written by</dt><dd id="detail-generated" hidden></dd>
         <dt id="dt-stale" hidden>Stale after</dt><dd id="detail-stale" hidden></dd>
+        <dt id="dt-resource" hidden>Resource</dt><dd id="detail-resource" hidden></dd>
         <dt id="dt-tags" hidden>Tags</dt><dd id="detail-tags" hidden></dd>
         <dt>Sources</dt><dd id="detail-sources"></dd>
       </dl>
+      <section id="detail-computation" hidden>
+        <h2>Sanctioned computation</h2>
+        <p class="muted">Run this rather than composing your own, then have the attester check the receipt.</p>
+        <dl>
+          <dt id="dt-runtime" hidden>Runtime</dt><dd id="comp-runtime" hidden></dd>
+          <dt id="dt-parameters" hidden>Parameters</dt><dd id="comp-parameters" hidden></dd>
+          <dt id="dt-computation" hidden>Computation</dt><dd id="comp-computation" hidden></dd>
+          <dt id="dt-executor" hidden>Executor</dt><dd id="comp-executor" hidden></dd>
+          <dt id="dt-receipt" hidden>Receipt must return</dt><dd id="comp-receipt" hidden></dd>
+          <dt id="dt-attester" hidden>Attester</dt><dd id="comp-attester" hidden></dd>
+        </dl>
+      </section>
       <hr>
       <div id="detail-body"></div>
       <section id="detail-out" hidden>

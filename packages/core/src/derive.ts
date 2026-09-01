@@ -268,6 +268,129 @@ function checkTrustAndLifecycle(
       ),
     );
   }
+
+  checkUsageWindow(metadata["usage_window"], path, "usage_window", guidance);
+  checkAttestationContract(metadata, path, guidance);
+}
+
+/** `usage_window` frames every `usage_count`, so a malformed one makes those counts unreadable. */
+function checkUsageWindow(
+  value: unknown,
+  path: string,
+  label: string,
+  guidance: Diagnostic[],
+): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!mapping(value)) {
+    guidance.push(
+      diagnostic("guidance", "warning", "guidance.usage-window.type", path, `${label} should be a mapping`),
+    );
+    return;
+  }
+  for (const key of ["from", "to"] as const) {
+    const bound = value[key];
+    if (bound !== undefined && (typeof bound !== "string" || !validDate(bound))) {
+      guidance.push(
+        diagnostic(
+          "guidance",
+          "warning",
+          `guidance.usage-window.${key}`,
+          path,
+          `${label}.${key} should be YYYY-MM-DD`,
+        ),
+      );
+    }
+  }
+}
+
+/**
+ * The contract fields of an Attested Computation. `runtime` is checked above; these are the
+ * fields that say how to run the computation and what evidence the attester inspects.
+ */
+function checkAttestationContract(
+  metadata: Readonly<Record<string, unknown>>,
+  path: string,
+  guidance: Diagnostic[],
+): void {
+  const parameters = metadata["parameters"];
+  if (parameters !== undefined) {
+    if (!Array.isArray(parameters)) {
+      guidance.push(
+        diagnostic("guidance", "warning", "guidance.parameters.type", path, "parameters should be a list"),
+      );
+    } else {
+      parameters.forEach((entry, index) => {
+        if (!mapping(entry) || !nonempty(entry["name"])) {
+          guidance.push(
+            diagnostic(
+              "guidance",
+              "warning",
+              "guidance.parameter.name",
+              path,
+              `parameters[${index}] should be a mapping with a non-empty name`,
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  const executor = metadata["executor"];
+  if (executor !== undefined) {
+    if (!mapping(executor)) {
+      guidance.push(
+        diagnostic("guidance", "warning", "guidance.executor.type", path, "executor should be a mapping"),
+      );
+    } else {
+      if (!nonempty(executor["resource"])) {
+        guidance.push(
+          diagnostic(
+            "guidance",
+            "warning",
+            "guidance.executor.resource",
+            path,
+            "executor.resource should be a non-empty string",
+          ),
+        );
+      }
+      const receipt = executor["receipt"];
+      if (
+        receipt !== undefined
+        && (!Array.isArray(receipt) || receipt.some((field) => !nonempty(field)))
+      ) {
+        guidance.push(
+          diagnostic(
+            "guidance",
+            "warning",
+            "guidance.executor.receipt",
+            path,
+            "executor.receipt should be a list of non-empty strings",
+          ),
+        );
+      }
+    }
+  }
+
+  const attester = metadata["attester"];
+  if (attester !== undefined) {
+    if (!mapping(attester)) {
+      guidance.push(
+        diagnostic("guidance", "warning", "guidance.attester.type", path, "attester should be a mapping"),
+      );
+    } else if (!nonempty(attester["resource"])) {
+      guidance.push(
+        diagnostic(
+          "guidance",
+          "warning",
+          "guidance.attester.resource",
+          path,
+          "attester.resource should be a non-empty string",
+        ),
+      );
+    }
+  }
 }
 
 export function deriveDocumentFields(
@@ -279,6 +402,7 @@ export function deriveDocumentFields(
 ): { readonly derived: DerivedDocumentFields; readonly guidance: readonly Diagnostic[] } {
   const guidance: Diagnostic[] = [];
   checkTrustAndLifecycle(metadata, path, guidance);
+  checkContractPaths(metadata, path, knownPaths, guidance);
 
   const tagsValue = metadata["tags"];
   let tags: readonly string[] = [];
@@ -311,4 +435,60 @@ export function deriveDocumentFields(
     },
     guidance,
   };
+}
+
+
+/**
+ * Resolve the path-valued fields of an Attested Computation. The spec lists `computation`,
+ * `executor.resource` and `attester.resource` alongside `sources[].resource` as fields that
+ * name a file, but only source resources were resolved, so a broken executor path passed
+ * without comment.
+ */
+/** Like `mapping`, but yields the record so its keys can be read. */
+function asMapping(value: unknown): Readonly<Record<string, unknown>> | null {
+  return mapping(value) ? value : null;
+}
+
+function checkContractPaths(
+  metadata: Readonly<Record<string, unknown>>,
+  path: string,
+  knownPaths: ReadonlySet<string>,
+  guidance: Diagnostic[],
+): void {
+  const executor = asMapping(metadata["executor"]);
+  const attester = asMapping(metadata["attester"]);
+  const candidates: readonly (readonly [string, unknown])[] = [
+    ["computation", metadata["computation"]],
+    ["executor.resource", executor?.["resource"]],
+    ["attester.resource", attester?.["resource"]],
+  ];
+
+  for (const [label, value] of candidates) {
+    const target = nonempty(value);
+    if (target === null || SCHEME.test(target)) {
+      continue;
+    }
+    const resolution = resolveWithinBundle(path, target);
+    if (resolution.kind === "escape") {
+      guidance.push(
+        diagnostic(
+          "guidance",
+          "warning",
+          "guidance.contract.escape",
+          path,
+          `${label} escapes the bundle: ${target}`,
+        ),
+      );
+    } else if (resolution.kind === "internal" && !knownPaths.has(resolution.path)) {
+      guidance.push(
+        diagnostic(
+          "guidance",
+          "warning",
+          "guidance.contract.broken",
+          path,
+          `${label} does not resolve: ${target}`,
+        ),
+      );
+    }
+  }
 }

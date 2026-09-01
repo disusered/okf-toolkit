@@ -142,7 +142,16 @@ test("projects canonical analysis without parsing OKF again", () => {
   );
   assert.deepEqual(graph.types, ["Concept", "Index"]);
   assert.deepEqual(graph.nodes[0]?.sources, [
-    { resource: "https://example.com/one", title: "Example" },
+    {
+      id: null,
+      resource: "https://example.com/one",
+      title: "Example",
+      author: null,
+      usageCount: null,
+      lastModified: null,
+      resolvedPath: null,
+      exists: null,
+    },
   ]);
   assert.deepEqual(graph.nodes[1]?.links, [
     { href: "concepts/one.md", target: "concepts/one.md", pending: false },
@@ -417,4 +426,142 @@ test("the built page module imports cleanly", async () => {
   // A regression that only appears on import would otherwise pass every other assertion here.
   const module = await import("../src/page/script.js");
   assert.equal(typeof module.PAGE_SCRIPT, "string");
+});
+
+/** A document whose raw frontmatter carries the provenance families. */
+function provenanceDocument(
+  path: string,
+  metadata: Record<string, unknown>,
+  sources: AnalyzedDocument["derived"]["sources"] = [],
+): AnalyzedDocument {
+  const base = document(path, path, String(metadata["type"] ?? "Concept"), `# ${path}\n`);
+  return {
+    ...base,
+    metadata: metadata as AnalyzedDocument["metadata"],
+    derived: { ...base.derived, staleAfter: null, sources },
+  };
+}
+
+test("who wrote a page and who checked it survive into the projection", () => {
+  const documents = [provenanceDocument("concepts/a.md", {
+    type: "Concept",
+    generated: { by: "reference_agent/gemini-2.5-pro", at: "2026-06-30T14:00:00Z" },
+    verified: [
+      { by: "human:carlos", at: "2026-07-01T09:00:00Z" },
+      { by: "process:finance-nightly", at: "2026-08-15T02:00:00Z" },
+    ],
+    usage_window: { from: "2026-06-01", to: "2026-06-30" },
+    resource: "https://example.com/canonical",
+  })];
+  const graph = toVisualizationGraph(analysis(documents, [signalNode("concepts/a.md", {})], []));
+  const projected = graph.nodes[0];
+
+  assert.deepEqual(projected?.generated, {
+    by: "reference_agent/gemini-2.5-pro",
+    at: "2026-06-30T14:00:00Z",
+  });
+  assert.equal(projected?.verified.length, 2);
+  assert.deepEqual(projected?.verified.map((entry) => entry.by), [
+    "human:carlos",
+    "process:finance-nightly",
+  ]);
+  // The timestamps are what answer "how recently", and were previously never read at all.
+  assert.equal(projected?.verified[1]?.at, "2026-08-15T02:00:00Z");
+  assert.deepEqual(projected?.usageWindow, { from: "2026-06-01", to: "2026-06-30" });
+  assert.equal(projected?.resource, "https://example.com/canonical");
+});
+
+test("a single check written without the list syntax becomes a one-element list", () => {
+  // The spec: consumers MUST treat a bare mapping as a one-element list.
+  const documents = [provenanceDocument("concepts/a.md", {
+    type: "Concept",
+    verified: { by: "human:carlos", at: "2026-08-31T12:00:00Z" },
+  })];
+  const graph = toVisualizationGraph(analysis(documents, [signalNode("concepts/a.md", {})], []));
+  assert.deepEqual(graph.nodes[0]?.verified, [
+    { by: "human:carlos", at: "2026-08-31T12:00:00Z" },
+  ]);
+});
+
+test("a page nobody checked reports no events rather than an absent field", () => {
+  const documents = [provenanceDocument("concepts/a.md", { type: "Concept" })];
+  const graph = toVisualizationGraph(analysis(documents, [signalNode("concepts/a.md", {})], []));
+  assert.deepEqual(graph.nodes[0]?.verified, []);
+  assert.equal(graph.nodes[0]?.generated, null);
+});
+
+test("every credibility signal on a source survives, and an untitled source stays untitled", () => {
+  const documents = [provenanceDocument("concepts/a.md", { type: "Concept" }, [
+    {
+      id: "policy",
+      resource: "https://example.com/policy",
+      title: "Revenue policy",
+      author: "human:jordi",
+      usageCount: 5000,
+      lastModified: "2026-06-15",
+      resolvedPath: null,
+      exists: null,
+    },
+    {
+      id: null,
+      resource: "https://example.com/plain",
+      title: null,
+      author: null,
+      usageCount: null,
+      lastModified: null,
+      resolvedPath: null,
+      exists: null,
+    },
+  ])];
+  const graph = toVisualizationGraph(analysis(documents, [signalNode("concepts/a.md", {})], []));
+  const [plain, policy] = graph.nodes[0]!.sources;
+
+  assert.equal(policy?.id, "policy");
+  assert.equal(policy?.author, "human:jordi");
+  assert.equal(policy?.usageCount, 5000);
+  assert.equal(policy?.lastModified, "2026-06-15");
+  // Previously the title defaulted to the resource, so "no title" was unrecoverable.
+  assert.equal(plain?.title, null);
+});
+
+test("the sanctioned computation is projected only for that page type", () => {
+  const contract = {
+    runtime: "bigquery",
+    parameters: [{ name: "year", type: "integer", required: true }],
+    computation: "references/revenue.sql",
+    executor: { resource: "references/run-on-bq.md", receipt: ["job_id", "executed_sql"] },
+    attester: { resource: "references/attest.py" },
+  };
+
+  const attested = toVisualizationGraph(analysis(
+    [provenanceDocument("concepts/c.md", { type: "Attested Computation", ...contract })],
+    [signalNode("concepts/c.md", { type: "Attested Computation" })], [],
+  )).nodes[0]?.attestation;
+
+  assert.equal(attested?.runtime, "bigquery");
+  assert.deepEqual(attested?.parameters, [{ name: "year", type: "integer", required: true }]);
+  assert.equal(attested?.computation, "references/revenue.sql");
+  assert.equal(attested?.executorResource, "references/run-on-bq.md");
+  assert.deepEqual(attested?.executorReceipt, ["job_id", "executed_sql"]);
+  assert.equal(attested?.attesterResource, "references/attest.py");
+
+  // The same frontmatter on an ordinary concept carries no computation contract.
+  const ordinary = toVisualizationGraph(analysis(
+    [provenanceDocument("concepts/d.md", { type: "Concept", ...contract })],
+    [signalNode("concepts/d.md", {})], [],
+  )).nodes[0]?.attestation;
+  assert.equal(ordinary, null);
+});
+
+test("the panel offers a verification row and a computation section", () => {
+  const documents = [provenanceDocument("concepts/a.md", { type: "Concept" })];
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(documents, [signalNode("concepts/a.md", {})], []),
+  });
+  assert.match(html, /id="detail-verified"/);
+  assert.match(html, /id="detail-generated"/);
+  assert.match(html, /id="detail-computation"/);
+  // The collapsed one-word row it replaced is gone.
+  assert.ok(!html.includes('id="detail-trust"'));
 });
