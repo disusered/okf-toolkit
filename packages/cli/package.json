@@ -1,6 +1,6 @@
 {
   "name": "@disusered/okf-cli",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Deterministic JSON command-line interface for one OKF bundle at a time",
   "type": "module",
   "repository": {

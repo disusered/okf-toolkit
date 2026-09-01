@@ -20,7 +20,7 @@ description: A concept written through okf_v1_apply_change.
 # Gamma reconciliation
 `;
 
-test("the reported version is the published package version", async () => {
+test("the reported version matches the package manifest", async () => {
   const manifest = JSON.parse(
     await readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ) as { version: string };

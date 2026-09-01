@@ -13,7 +13,7 @@ import { createFilesystemOkfV1Operations } from "./operations.js";
  * `package.json`, which does not sit under `rootDir`; `test/version.test.ts` keeps the two
  * from drifting.
  */
-export const SERVER_VERSION = "1.0.0-rc.2";
+export const SERVER_VERSION = "1.0.0-rc.3";
 
 export interface OkfLocalServerOptions {
   /** Absolute or relative project root. Relative paths resolve against `cwd`. */

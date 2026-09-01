@@ -1,6 +1,6 @@
 {
   "name": "okf-node",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Confined filesystem adapter and local change operations for OKF bundles",
   "type": "module",
   "repository": {
