@@ -16,6 +16,7 @@ search, links, graphs, or writes across bundles.
 - `okf-mcp`: the transport-neutral versioned `okf_v1_*` MCP tool surface.
 - `okf-cloudflare`: R2, MCP, and Queue consumer support.
 - `@disusered/okf-cli`: the `okf` JSON CLI.
+- `@disusered/okf-mcp`: the `okf-mcp` local stdio and loopback HTTP MCP server.
 - `okf-signatures`: optional Ed25519 bundle-integrity manifests.
 
 The workspace requires Node 24 and pnpm 10.28.2.

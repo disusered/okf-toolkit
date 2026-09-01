@@ -1,0 +1,53 @@
+{
+  "name": "@disusered/okf-mcp",
+  "version": "1.0.0-rc.2",
+  "description": "Local stdio and loopback HTTP MCP server for one filesystem OKF bundle",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/disusered/okf-toolkit.git",
+    "directory": "packages/local-mcp"
+  },
+  "homepage": "https://github.com/disusered/okf-toolkit#readme",
+  "bugs": {
+    "url": "https://github.com/disusered/okf-toolkit/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "bin": {
+    "okf-mcp": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "okf-contracts": "workspace:*",
+    "okf-core": "workspace:*",
+    "okf-mcp": "workspace:*",
+    "okf-node": "workspace:*",
+    "okf-viz": "workspace:*"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2"
+  },
+  "license": "Apache-2.0"
+}

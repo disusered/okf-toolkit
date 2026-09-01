@@ -13,6 +13,7 @@ export const releasePackages = [
   { directory: "mcp", name: "okf-mcp" },
   { directory: "cloudflare", name: "okf-cloudflare" },
   { directory: "cli", name: "@disusered/okf-cli" },
+  { directory: "local-mcp", name: "@disusered/okf-mcp" },
 ];
 
 export function packFilename(name, version) {

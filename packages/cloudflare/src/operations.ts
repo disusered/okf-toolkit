@@ -10,12 +10,11 @@ import type {
 import { OPERATIONS_SCHEMA } from "okf-contracts";
 import {
   analyzeBundle,
-  byCodePoint,
   canonicalChangeJson,
+  listBundleEntries,
   parseChange,
   searchBundle,
   unifiedDiff,
-  validateBundlePath,
   type AnalyzeBundleOptions,
 } from "okf-core";
 import type { OkfV1Operations } from "okf-mcp";
@@ -173,30 +172,13 @@ export async function changePreviewId(input: Change): Promise<string> {
   return canonicalDigest(input);
 }
 
+/** The shared listing policy, reported as an R2 failure so callers keep one error type. */
 function listedPaths(documents: readonly RawBundleDocument[], requested: string, depth: number) {
-  let confined = "";
-  if (requested !== ".") {
-    try {
-      confined = validateBundlePath(requested);
-    } catch {
-      throw new R2BundleError(`list path is not confined: ${requested}`);
-    }
+  try {
+    return listBundleEntries(documents.map((document) => document.path), requested, depth);
+  } catch (error) {
+    throw new R2BundleError(error instanceof Error ? error.message : `list path is not confined: ${requested}`);
   }
-  const prefix = confined ? `${confined}/` : "";
-  const entries = new Map<string, "directory" | "markdown">();
-  for (const document of documents) {
-    if (!document.path.startsWith(prefix)) continue;
-    const relative = document.path.slice(prefix.length);
-    const parts = relative.split("/");
-    if (parts.length - 1 <= depth) entries.set(document.path, "markdown");
-    const directories = parts.slice(0, -1);
-    for (let index = 0; index < Math.min(directories.length, depth); index += 1) {
-      entries.set(`${prefix}${directories.slice(0, index + 1).join("/")}`, "directory");
-    }
-  }
-  return [...entries]
-    .map(([path, type]) => ({ path, type }))
-    .sort((left, right) => byCodePoint(left.path, right.path));
 }
 
 /** Create all versioned MCP operations for one R2 bundle. */

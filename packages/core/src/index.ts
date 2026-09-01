@@ -4,6 +4,8 @@ export { documentExtensions } from "./derive.js";
 export { buildGraph } from "./graph.js";
 export { extractMarkdownLinks } from "./links.js";
 export type { ExtractLinksOptions } from "./links.js";
+export { listBundleEntries } from "./listing.js";
+export type { BundleListingEntry, BundleListingEntryType } from "./listing.js";
 export {
   byCodePoint,
   canonicalizeBundlePath,

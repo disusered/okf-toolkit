@@ -1,0 +1,14 @@
+schema_version: 1
+adapter: fixture
+instructions:
+  common:
+    - INSTRUCTIONS.md
+  bundles:
+    fixture:
+      - CONTEXT.md
+bundles:
+  fixture:
+    root: knowledge
+    index: index.md
+    audience: Fixture bundle for okf-mcp tests
+    access: read-write
