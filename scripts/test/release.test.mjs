@@ -25,6 +25,7 @@ test("release plan fixes package order and prerelease tag", async () => {
       "okf-viz",
       "okf-node",
       "okf-signatures",
+      "okf-mcp",
       "okf-cloudflare",
       "@disusered/okf-cli",
     ],

@@ -7,8 +7,7 @@ import type {
 } from "okf-contracts";
 import { OPERATIONS_SCHEMA } from "okf-contracts";
 import { byCodePoint, parseChange } from "okf-core";
-
-import type { OkfV1Operations } from "./mcp.js";
+import type { OkfV1Operations } from "okf-mcp";
 
 export const OKF_V1_DURABLE_APPLY_PATH = "/v1/apply-change";
 

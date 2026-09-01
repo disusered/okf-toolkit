@@ -7,7 +7,7 @@ workstation. The name bootstrap described in this guide is not a release.
 The `.github/workflows/release.yml` workflow starts when you publish a GitHub
 release for an annotated, signed tag named `v<version>`. The tag must point to the
 reviewed release commit, and `<version>` must match the root manifest and all
-seven package manifests.
+eight package manifests.
 
 ## Create the release tag
 
@@ -55,14 +55,14 @@ For the tagged commit, the workflow:
 1. The build job checks out the tagged commit and verifies the signed tag,
    version agreement, package metadata, and release plan. It installs the frozen
    lockfile, runs `pnpm check`, packs once, checks each tarball, and installs all
-   seven OKF packages from the packed artifacts in a clean project. It uploads
+   eight OKF packages from the packed artifacts in a clean project. It uploads
    the complete release directory as one immutable Actions artifact.
 2. The npm publication job downloads and verifies that artifact without checking
    out repository code. After the `npm-release` environment approves the job, it
    publishes the exact tarballs with `--provenance --ignore-scripts --access
    public` in the required dependency order.
 3. The release-assets job downloads and verifies the same artifact, then attaches
-   the seven tarballs, `SHA256SUMS`, and `RELEASE.json` to the GitHub release that
+   the eight tarballs, `SHA256SUMS`, and `RELEASE.json` to the GitHub release that
    started the workflow.
 
 The dependency order is:
@@ -72,8 +72,9 @@ The dependency order is:
 3. `okf-viz`
 4. `okf-node`
 5. `okf-signatures`
-6. `okf-cloudflare`
-7. `@disusered/okf-cli`
+6. `okf-mcp`
+7. `okf-cloudflare`
+8. `@disusered/okf-cli`
 
 A SemVer prerelease such as `1.0.0-rc.1` uses the npm `next` distribution tag
 and requires a GitHub prerelease. A stable version such as `1.0.0` uses `latest`
@@ -118,6 +119,7 @@ packages=(
   okf-viz
   okf-node
   okf-signatures
+  okf-mcp
   okf-cloudflare
   @disusered/okf-cli
 )

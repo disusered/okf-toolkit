@@ -11,7 +11,7 @@ import {
   durableObjectStubForBundle,
   withDurableObjectApply,
 } from "../src/durable-object.js";
-import type { OkfV1Operations } from "../src/mcp.js";
+import type { OkfV1Operations } from "okf-mcp";
 
 function applyRequest(path: string, digit: string): ApplyChangeRequest {
   return {

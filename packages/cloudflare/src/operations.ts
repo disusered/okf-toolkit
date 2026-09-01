@@ -18,8 +18,8 @@ import {
   validateBundlePath,
   type AnalyzeBundleOptions,
 } from "okf-core";
+import type { OkfV1Operations } from "okf-mcp";
 
-import type { OkfV1Operations } from "./mcp.js";
 import {
   confinedBundlePath,
   R2BundleAdapter,

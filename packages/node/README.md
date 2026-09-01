@@ -41,6 +41,28 @@ bundles:
 
 There is no local registry and no cross-bundle lookup.
 
+## Validation profiles
+
+`loadValidationProfile` imports a consumer's executable profile and returns its
+`profile` export once it has a string `id` and a `validate` function. The base
+directory is the first parameter rather than `process.cwd()`, because a harness
+starts a server from a directory nobody chose: the CLI passes its invocation
+directory and a server passes the resolved bundle's project root.
+
+```ts
+import { loadValidationProfile, resolveBundleTarget } from "okf-node";
+
+const target = await resolveBundleTarget(projectRoot, "private");
+const profile = await loadValidationProfile(
+  target.projectRoot,
+  ".agents/okf-private-profile.mjs",
+);
+const analysis = await target.bundle.analyze({ profile });
+```
+
+Loading a profile executes the module. Only pass a specifier the deployment
+already trusts.
+
 ## Changes
 
 `previewChange` accepts the versioned `Change` union and returns the SHA-256 ID

@@ -48,13 +48,10 @@ importers:
       okf-core:
         specifier: workspace:*
         version: link:../core
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
+      okf-mcp:
+        specifier: workspace:*
+        version: link:../mcp
     devDependencies:
-      '@modelcontextprotocol/client':
-        specifier: 2.0.0
-        version: 2.0.0
       okf-node:
         specifier: workspace:*
         version: link:../node
@@ -72,6 +69,28 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  packages/mcp:
+    dependencies:
+      '@modelcontextprotocol/server':
+        specifier: 2.0.0
+        version: 2.0.0
+      okf-contracts:
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: 2.0.0
+        version: 2.0.0
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
 
   packages/node:
     dependencies:
