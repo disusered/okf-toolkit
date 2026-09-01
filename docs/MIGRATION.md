@@ -37,14 +37,19 @@ pass, and neither Consumer contains a second generic OKF parser.
 
 ## Gate 3: Iteramind private and shared
 
-- Use CLI plus the filesystem adapter for the Private Bundle; do not run a
-  local MCP server.
+- Reach the Private Bundle with the CLI plus the filesystem adapter, and serve
+  the same bundle over `okf-mcp` for a surface that has no file tools of its
+  own. Both doors read the same files under the same profile.
 - Compose the hosted Worker from Iteramind Access and author policy plus the
   versioned Cloudflare MCP/R2 implementation.
-- Serialize reviewed hosted applies for the fixed Bundle through one Durable
-  Object instance; author allowlisting is not a concurrency guarantee.
-- Attach R2 notifications, a Queue, and a dead-letter queue so source object
-  changes rebuild a deterministic viewer outside the watched prefix.
+- Serialize reviewed hosted applies through R2's conditional writes. A Durable
+  Object was tried and removed: the storage layer already refuses a lost
+  update, so serializing it a second time bought nothing and cost a billable
+  resource. Author allowlisting remains an authorization rule, not a
+  concurrency guarantee.
+- Rebuild the deterministic viewer inside `applyChange`, through the write
+  authority the bucket binding already holds. No queue, no dead-letter queue,
+  and no R2 event notification.
 - Run authenticated read, change, validation, and viewer checks in the
   deployment workflow.
 
@@ -55,7 +60,10 @@ rebuild the same viewer without cross-Bundle behavior.
 ## Gate 4: retire duplicates and release v1
 
 - Archive the Iteramind local MCP, profile-only validator, and separate viewer
-  repositories after their responsibilities have moved.
+  repositories after their responsibilities have moved. Done:
+  `iteramind/okf-mcp` and `iteramind/okf-shared` were archived on 1 September
+  2026, and the unused `okf-shared-viz` checkout was deleted on 31 August 2026
+  without ever reaching a remote.
 - Remove the dotfiles renderer and duplicated skill adapters after every
   harness resolves the canonical transport-neutral skill.
 - Preserve repository history and migration receipts; do not keep deprecated
