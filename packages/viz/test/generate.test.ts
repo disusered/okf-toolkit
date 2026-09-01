@@ -11,6 +11,7 @@ import type {
 
 import { generateVisualization, GeneratorError, toVisualizationGraph } from "../src/index.js";
 import { PAGE_SCRIPT } from "../src/page/script.js";
+import { PAGE_STYLE } from "../src/page/style.js";
 
 const POSITION = { line: 1, column: 1, offset: 0 } as const;
 const RANGE = { start: POSITION, end: POSITION } as const;
@@ -144,7 +145,7 @@ test("projects canonical analysis without parsing OKF again", () => {
     { resource: "https://example.com/one", title: "Example" },
   ]);
   assert.deepEqual(graph.nodes[1]?.links, [
-    { href: "concepts/one.md", target: "concepts/one.md" },
+    { href: "concepts/one.md", target: "concepts/one.md", pending: false },
   ]);
 
   const proseOnly = analysis(
@@ -307,8 +308,10 @@ test("trust facets are ranked, and other facets sorted, over authored pages only
 });
 
 test("a link to an unwritten page becomes a pending node rather than vanishing", () => {
+  // href and resolvedPath deliberately differ. An earlier version keyed the pending node on
+  // href, which this fixture catches and an href === resolvedPath fixture cannot.
   const unwritten: AnalyzedLink = {
-    href: "concepts/later.md",
+    href: "../concepts/later.md",
     text: "later",
     kind: "internal",
     resolvedPath: "concepts/later.md",
@@ -323,7 +326,8 @@ test("a link to an unwritten page becomes a pending node rather than vanishing",
   );
 
   const pending = graph.nodes.find((entry) => entry.pending);
-  assert.equal(pending?.path, "concepts/later.md");
+  assert.equal(pending?.path, "concepts/later.md", "pending node keys on the resolved path");
+  assert.equal(pending?.id, "pending:concepts/later.md");
   assert.equal(pending?.type, "Pending");
   assert.ok(graph.edges.some((entry) => entry.relation === "pending"));
   // The pending placeholder must not pollute the authored facets.
@@ -379,7 +383,7 @@ test("the same triple always produces the same bytes", () => {
   );
 });
 
-test("the reader is laid out below the graph and can still scroll", () => {
+test("the reader is laid out beside the graph and can still scroll", () => {
   const documents = [signalDocument("concepts/a.md", null)];
   const html = generateVisualization({
     bundle: "b",
@@ -387,7 +391,8 @@ test("the reader is laid out below the graph and can still scroll", () => {
   });
   assert.ok(html.indexOf('id="graph"') < html.indexOf('id="split"'));
   assert.ok(html.indexOf('id="split"') < html.indexOf('id="detail"'));
-  assert.match(html, /main \{ display: flex; flex-direction: column;/);
+  assert.match(html, /main \{ display: flex; flex-direction: row;/);
+  assert.match(html, /main\[data-orientation="rows"\] \{ flex-direction: column; \}/);
   assert.match(html, /#detail \{[^}]*min-height: 0;[^}]*overflow-y: auto;/s);
 });
 
@@ -395,4 +400,18 @@ test("browser storage is guarded and names no origin", () => {
   assert.match(PAGE_SCRIPT, /okf\.viz\.prefs\.v1/);
   assert.match(PAGE_SCRIPT, /try \{[\s\S]*localStorage[\s\S]*catch/);
   assert.ok(!/iteramind|https?:\/\//i.test(PAGE_SCRIPT));
+});
+
+test("embedded page sources carry no backtick, which would end their template literal", () => {
+  // PAGE_SCRIPT and PAGE_STYLE are String.raw template literals. A backtick anywhere inside
+  // them - including in a comment - terminates the literal and produces a syntax error in the
+  // built module. That failure surfaces only when the package is imported, so pin it here.
+  assert.ok(!PAGE_SCRIPT.includes("`"), "PAGE_SCRIPT must contain no backtick");
+  assert.ok(!PAGE_STYLE.includes("`"), "PAGE_STYLE must contain no backtick");
+});
+
+test("the built page module imports cleanly", async () => {
+  // A regression that only appears on import would otherwise pass every other assertion here.
+  const module = await import("../src/page/script.js");
+  assert.equal(typeof module.PAGE_SCRIPT, "string");
 });

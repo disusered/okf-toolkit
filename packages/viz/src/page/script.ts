@@ -19,7 +19,9 @@ export const PAGE_SCRIPT = String.raw`
   graph.nodes.forEach(function (node) {
     nodeById[node.id] = node;
     var map = Object.create(null);
-    node.links.forEach(function (link) { map[link.href] = link.target; });
+    node.links.forEach(function (link) {
+      map[link.href] = link.pending ? "pending:" + link.target : link.target;
+    });
     linksBySource[node.id] = map;
   });
 
@@ -92,12 +94,33 @@ export const PAGE_SCRIPT = String.raw`
   fillSelect(trustSelect, graph.trustTiers, function (t) { return TRUST_LABEL[t] || t; });
   fillSelect(statusSelect, graph.statuses);
 
-  // Only offer a facet the bundle actually varies on.
+  // Hiding a control is only ever about filtering. Every node draws its own trust tier
+  // regardless, so a uniform bundle still shows what that tier is.
   trustSelect.hidden = graph.trustTiers.length < 2;
   statusSelect.hidden = graph.statuses.length < 2;
   var anyStale = graph.nodes.some(function (node) { return node.stale === true; });
   staleOnlyLabel.hidden = !anyStale;
-  legendEl.hidden = graph.trustTiers.length < 2 && !anyStale && !pendingCount;
+
+  // Ring colours are chosen at view time, not build time: a near-black ring is invisible on a
+  // dark background, and the human-reviewed ring is the one signal that must always read.
+  function runLayout(name) {
+    cy.layout({
+      name: name,
+      animate: false,
+      padding: 36,
+      nodeRepulsion: 6000,
+      idealEdgeLength: 100,
+      componentSpacing: 80,
+      nodeOverlap: 20,
+      // Fit once the layout settles, or a graph larger than its pane is silently clipped.
+      stop: function () { fitGraph(); }
+    }).run();
+  }
+
+  var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  var INK = dark ? "#f8fafc" : "#0f172a";
+  var MUTED = dark ? "#94a3b8" : "#64748b";
+  var FAINT = dark ? "#475569" : "#cbd5e1";
 
   var cy = cytoscape({
     container: document.getElementById("graph"),
@@ -105,6 +128,7 @@ export const PAGE_SCRIPT = String.raw`
       var classes = [];
       if (node.trustTier === "human-reviewed") { classes.push("human"); }
       if (node.trustTier === "machine-confirmed") { classes.push("machine"); }
+      if (node.trustTier === "unverified" && !node.pending) { classes.push("unverified"); }
       if (node.stale === true) { classes.push("stale"); }
       if (node.status === "deprecated") { classes.push("deprecated"); }
       if (node.pending) { classes.push("pending"); }
@@ -121,18 +145,23 @@ export const PAGE_SCRIPT = String.raw`
         style: {
           "background-color": "data(color)",
           "label": "data(label)",
-          "color": "#64748b",
+          "color": MUTED,
           "font-size": 10,
           "text-valign": "bottom",
           "text-margin-y": 5,
           "text-wrap": "wrap",
-          "text-max-width": 130,
+          "text-max-width": 110,
+          "text-overflow-wrap": "anywhere",
+          "text-background-color": dark ? "#0b1120" : "#f8fafc",
+          "text-background-opacity": 0.85,
+          "text-background-padding": 2,
           "width": "data(size)",
           "height": "data(size)"
         }
       },
-      { selector: "node.machine", style: { "border-width": 2, "border-style": "dashed", "border-color": "#64748b" } },
-      { selector: "node.human", style: { "border-width": 2, "border-style": "solid", "border-color": "#0f172a" } },
+      { selector: "node.unverified", style: { "border-width": 2, "border-style": "dotted", "border-color": FAINT } },
+      { selector: "node.machine", style: { "border-width": 2, "border-style": "dashed", "border-color": MUTED } },
+      { selector: "node.human", style: { "border-width": 2, "border-style": "solid", "border-color": INK } },
       { selector: "node.stale", style: { "border-width": 3, "border-style": "double", "border-color": "#b45309" } },
       { selector: "node.deprecated", style: { "opacity": 0.45 } },
       { selector: "node.pending", style: { "opacity": 0.5, "border-width": 1, "border-style": "dotted", "border-color": "#94a3b8" } },
@@ -153,7 +182,18 @@ export const PAGE_SCRIPT = String.raw`
       { selector: "edge:selected", style: { "line-color": "#b45309", "target-arrow-color": "#b45309", "width": 2.4 } },
       { selector: ".dim", style: { "opacity": 0.12 } }
     ],
-    layout: { name: "cose", animate: false, padding: 36 }
+    // Labels sit below their node, so the default packing overlaps them. Give the layout room.
+    layout: {
+      name: "cose",
+      animate: false,
+      padding: 36,
+      nodeRepulsion: 6000,
+      idealEdgeLength: 100,
+      componentSpacing: 80,
+      nodeOverlap: 20
+      // No stop hook here: it would fire during construction, before the cy variable is
+      // assigned, and the throw would abort the rest of this script. cose fits on its own.
+    }
   });
 
   // Layout preferences live in localStorage, keyed generically so the page carries no origin.
@@ -186,18 +226,19 @@ export const PAGE_SCRIPT = String.raw`
   }
 
   function setOrientation(value) {
-    if (value === "columns") { mainEl.setAttribute("data-orientation", "columns"); }
+    // Columns is the default and carries no attribute; rows is the opt-in.
+    if (value === "rows") { mainEl.setAttribute("data-orientation", "rows"); }
     else { mainEl.removeAttribute("data-orientation"); }
     orientationSelect.value = value;
-    splitEl.setAttribute("aria-orientation", value === "columns" ? "vertical" : "horizontal");
+    splitEl.setAttribute("aria-orientation", value === "rows" ? "horizontal" : "vertical");
   }
 
   var prefs = readPrefs();
-  setOrientation(prefs.orientation === "columns" ? "columns" : "rows");
-  setSplit(typeof prefs.split === "number" ? prefs.split : 55);
+  setOrientation(prefs.orientation === "rows" ? "rows" : "columns");
+  setSplit(typeof prefs.split === "number" ? prefs.split : 60);
   if (prefs.layout && prefs.layout !== layoutSelect.value) {
     layoutSelect.value = prefs.layout;
-    cy.layout({ name: prefs.layout, animate: false, padding: 36 }).run();
+    runLayout(prefs.layout);
   }
 
   orientationSelect.addEventListener("change", function () {
@@ -246,14 +287,44 @@ export const PAGE_SCRIPT = String.raw`
   // Resize the canvas, but never re-fit: dragging the splitter must not throw away the
   // reader's pan and zoom.
   if (typeof ResizeObserver === "function") {
-    new ResizeObserver(function () { cy.resize(); }).observe(document.getElementById("graph"));
+    new ResizeObserver(function () {
+      cy.resize();
+      // The first real size may only arrive here, after the frame loop above gave up waiting.
+      if (!fitted) {
+        var box = document.getElementById("graph").getBoundingClientRect();
+        if (box.width >= 1 && box.height >= 1) { fitted = true; fitGraph(); }
+      }
+    }).observe(document.getElementById("graph"));
   }
+
+  // Fit after a frame, not now: the flex container has not been laid out yet, so cytoscape
+  // would measure a zero or stale viewport and compute a zoom that leaves nodes off-screen.
+  // The padding is generous because fit measures nodes, not the labels drawn beneath them.
+  function fitGraph() {
+    cy.resize();
+    cy.fit(undefined, 60);
+    // fit measures node bounds; labels are drawn beneath and outside them, so ease off the
+    // zoom a little or the outermost captions sit past the edge of the pane.
+    cy.zoom(cy.zoom() * 0.82);
+    cy.center();
+  }
+
+  // One frame is not reliably enough: the flex container may still measure zero, and a fit
+  // against a zero viewport leaves every node off-screen. Wait until it has real dimensions.
+  var fitted = false;
+  function fitWhenSized() {
+    var box = document.getElementById("graph").getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) { requestAnimationFrame(fitWhenSized); return; }
+    fitted = true;
+    fitGraph();
+  }
+  requestAnimationFrame(fitWhenSized);
 
   cy.on("tap", "node", function (event) { showNode(event.target.id()); });
   cy.on("tap", function (event) { if (event.target === cy) { clearSelection(); } });
 
   layoutSelect.addEventListener("change", function () {
-    cy.layout({ name: layoutSelect.value, animate: false, padding: 36 }).run();
+    runLayout(layoutSelect.value);
     writePrefs({ layout: layoutSelect.value });
   });
 
@@ -263,10 +334,10 @@ export const PAGE_SCRIPT = String.raw`
     trustSelect.value = "";
     statusSelect.value = "";
     staleOnly.checked = false;
-    setOrientation("rows");
-    setSplit(55);
+    setOrientation("columns");
+    setSplit(60);
     applyFilters();
-    cy.fit(undefined, 36);
+    fitGraph();
     clearSelection();
   });
 
@@ -311,7 +382,7 @@ export const PAGE_SCRIPT = String.raw`
     contentEl.hidden = true;
   }
 
-  function showNode(id) {
+  function showNode(id, keepCamera) {
     var node = nodeById[id];
     if (!node) { return; }
 
@@ -383,16 +454,20 @@ export const PAGE_SCRIPT = String.raw`
     var outgoing = [];
     var already = Object.create(null);
     node.links.forEach(function (link) {
-      if (link.target !== node.id && !already[link.target]) {
-        already[link.target] = true;
-        outgoing.push(link.target);
+      var id = link.pending ? "pending:" + link.target : link.target;
+      if (id !== node.id && !already[id]) {
+        already[id] = true;
+        outgoing.push(id);
       }
     });
     fillReferences(outSection, outList, outgoing);
     fillReferences(backSection, backList, backlinks[node.id] || []);
 
     detailEl.scrollTop = 0;
-    if (element && element.length) {
+    // The camera only follows a deliberate selection. On first paint the page opens a node to
+    // fill the reader, and moving the view there would fight the initial fit and can leave the
+    // graph parked on empty canvas.
+    if (element && element.length && !keepCamera) {
       cy.animate({ center: { eles: element }, zoom: Math.max(cy.zoom(), 0.9) }, { duration: 180 });
     }
   }
@@ -484,6 +559,6 @@ export const PAGE_SCRIPT = String.raw`
   }
 
   var opening = graph.nodes.find(function (node) { return node.path === "index.md"; }) || graph.nodes[0];
-  if (opening) { showNode(opening.id); }
+  if (opening) { showNode(opening.id, true); }
 })();
 `;

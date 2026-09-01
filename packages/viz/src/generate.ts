@@ -151,17 +151,17 @@ export function generateVisualization(input: VisualizationInput): string {
       <option value="grid">Grid</option>
     </select>
     <select id="orientation" aria-label="Split orientation">
-      <option value="rows">Rows</option>
       <option value="columns">Columns</option>
+      <option value="rows">Rows</option>
     </select>
     <button id="reset" type="button">Reset view</button>
   </div>
-  <details id="legend">
+  <details id="legend" open>
     <summary class="muted">Key</summary>
     <ul class="plain">
       <li><span class="ring human"></span> reviewed by a person</li>
       <li><span class="ring machine"></span> confirmed by a machine only</li>
-      <li><span class="ring none"></span> unverified</li>
+      <li><span class="ring none"></span> unverified — nobody has attested it</li>
       <li><span class="ring stale"></span> past its <code>stale_after</code></li>
       <li><span class="ring faded"></span> deprecated, or not yet written</li>
     </ul>
@@ -170,7 +170,7 @@ export function generateVisualization(input: VisualizationInput): string {
 
 <main>
   <section id="graph" aria-label="Bundle graph"></section>
-  <div id="split" role="separator" aria-orientation="horizontal" aria-label="Resize" tabindex="0"></div>
+  <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize" tabindex="0"></div>
   <aside id="detail">
     <p id="detail-empty" class="empty">Select a page in the graph.</p>
     <article id="detail-content" hidden>

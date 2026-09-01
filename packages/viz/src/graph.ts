@@ -13,12 +13,14 @@ export interface VisualizationSource {
 }
 
 /**
- * One in-bundle link. `target` is null when the page it points at is not written yet, which
- * OKF treats as pending work rather than a broken reference.
+ * One in-bundle link, always carrying the canonical Bundle-relative target `okf-core`
+ * resolved. `pending` marks a target nobody has written yet, which OKF treats as work still
+ * to do rather than a broken reference.
  */
 export interface VisualizationLink {
   readonly href: string;
-  readonly target: string | null;
+  readonly target: string;
+  readonly pending: boolean;
 }
 
 export interface VisualizationNode {
@@ -104,7 +106,9 @@ function linksOf(document: AnalyzedDocument | undefined): VisualizationLink[] {
     seen.add(link.href);
     // A target that does not exist yet is kept, not dropped. OKF treats it as knowledge
     // pending to be written, and the page renders it as the bundle's own to-do list.
-    links.push({ href: link.href, target: link.exists ? link.resolvedPath : null });
+    // The resolved path is what identifies it, so two pages linking to the same unwritten
+    // page by different relative hrefs converge on one node.
+    links.push({ href: link.href, target: link.resolvedPath, pending: !link.exists });
   }
   return links;
 }
@@ -176,12 +180,12 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
 
   // A link whose target nobody has written yet becomes a placeholder node, so the graph shows
   // the work the bundle has given itself instead of silently dropping the edge.
-  const byPath = new Map(nodes.map((node) => [node.path, node]));
+  const byPath = new Set(nodes.map((node) => node.path));
   const pendingPaths = new Set<string>();
   for (const node of nodes) {
     for (const link of node.links) {
-      if (link.target === null && !byPath.has(link.href)) {
-        pendingPaths.add(link.href);
+      if (link.pending && !byPath.has(link.target)) {
+        pendingPaths.add(link.target);
       }
     }
   }
@@ -229,9 +233,9 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
 
   for (const node of nodes) {
     for (const link of node.links) {
-      if (link.target !== null) continue;
-      const target = `pending:${link.href}`;
-      if (!pendingPaths.has(link.href)) continue;
+      if (!link.pending) continue;
+      const target = `pending:${link.target}`;
+      if (!pendingPaths.has(link.target)) continue;
       const key = `${node.id}\u0000${target}\u0000pending`;
       if (seen.has(key)) continue;
       seen.add(key);

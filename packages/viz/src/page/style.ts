@@ -27,6 +27,12 @@ export const PAGE_STYLE = String.raw`
 
 * { box-sizing: border-box; }
 
+/*
+ * The hidden attribute is how this page shows and hides controls, and any explicit display
+ * rule silently defeats it. Restate it with precedence so a later layout rule cannot.
+ */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   display: flex;
@@ -65,20 +71,21 @@ header {
   border-radius: 4px;
 }
 
-.controls input { width: 240px; }
+.controls input[type="search"] { width: 240px; }
+.controls input[type="checkbox"] { width: auto; margin: 0 4px 0 0; }
+#stale-only-label { display: inline-flex; align-items: center; font-size: 13px; }
 .controls button { cursor: pointer; }
 .controls button:hover { border-color: var(--muted); }
 
 /*
- * Rows by default: the graph above, the reader below. A side-by-side split makes long Markdown
- * a narrow column, which is harder to read than it is to scan. --split drives the graph's
- * share in both orientations, so the toggle only has to change flex-direction.
+ * Columns by default: graph beside reader. --split drives the graph's share in either
+ * orientation, so the toggle only has to change flex-direction.
  */
-main { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+main { display: flex; flex-direction: row; flex: 1; min-height: 0; }
 
 #graph {
-  flex: 0 0 var(--split, 55%);
-  min-height: 160px;
+  flex: 0 0 var(--split, 60%);
+  min-height: 0;
   min-width: 0;
   background: var(--panel);
 }
@@ -86,7 +93,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #split {
   flex: 0 0 6px;
   background: var(--line);
-  cursor: row-resize;
+  cursor: col-resize;
   touch-action: none;
 }
 
@@ -100,13 +107,13 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   overflow-y: auto;
   padding: 18px 22px;
   background: var(--panel);
-  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 
-main[data-orientation="columns"] { flex-direction: row; }
-main[data-orientation="columns"] > #graph { flex: 0 0 var(--split, 55%); min-height: 0; }
-main[data-orientation="columns"] > #split { cursor: col-resize; }
-main[data-orientation="columns"] > #detail { border-top: 0; border-left: 1px solid var(--line); }
+main[data-orientation="rows"] { flex-direction: column; }
+main[data-orientation="rows"] > #graph { min-height: 160px; }
+main[data-orientation="rows"] > #split { cursor: row-resize; }
+main[data-orientation="rows"] > #detail { border-left: 0; border-top: 1px solid var(--line); }
 
 #detail h1 { font-size: 19px; margin: 6px 0 2px; }
 #detail h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 22px 0 6px; }
@@ -212,20 +219,20 @@ ul.plain .muted { display: block; font-family: ui-monospace, SFMono-Regular, Men
 
 .ring.human { box-shadow: 0 0 0 2px var(--ink); }
 .ring.machine { box-shadow: 0 0 0 2px var(--muted); }
-.ring.none { opacity: .55; }
+.ring.none { box-shadow: 0 0 0 2px var(--line); }
 .ring.stale { box-shadow: 0 0 0 3px var(--accent); }
 .ring.faded { opacity: .35; }
 
-/* Narrow viewports force rows however the toggle is set; columns needs width to earn its keep. */
+/* Narrow viewports stack however the toggle is set; columns needs width to earn its keep. */
 @media (max-width: 820px) {
-  main[data-orientation="columns"] { flex-direction: column; }
-  main[data-orientation="columns"] > #graph { flex: 0 0 var(--split, 55%); min-height: 160px; }
-  main[data-orientation="columns"] > #split { cursor: row-resize; }
-  main[data-orientation="columns"] > #detail { border-top: 1px solid var(--line); border-left: 0; }
+  main { flex-direction: column; }
+  main > #graph { min-height: 160px; }
+  main > #split { cursor: row-resize; }
+  main > #detail { border-left: 0; border-top: 1px solid var(--line); }
 }
 
-/* A short viewport gives the reader more room; 55% of 600px is not a usable reading pane. */
+/* Stacked on a short viewport, 60% leaves no usable reading pane. */
 @media (max-height: 620px) {
-  main:not([data-orientation="columns"]) > #graph { flex-basis: 40%; }
+  main[data-orientation="rows"] > #graph { flex-basis: 40%; }
 }
 `;
