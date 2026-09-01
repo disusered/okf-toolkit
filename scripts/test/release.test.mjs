@@ -3,8 +3,17 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadReleasePlan, parseVersion } from "../release-config.mjs";
 
+/*
+ * Read the version rather than hardcoding it. These assertions used to name a release
+ * literally, so every version bump failed a test that was not about versions.
+ */
+const VERSION = JSON.parse(
+  await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+).version;
+const TAG = `v${VERSION}`;
+
 test("release plan fixes package order and prerelease tag", async () => {
-  const plan = await loadReleasePlan({ tag: "v1.0.0-rc.1" });
+  const plan = await loadReleasePlan({ tag: TAG });
   assert.equal(plan.distTag, "next");
   assert.equal(plan.packageManager, "pnpm@10.28.2");
   assert.equal(plan.prerelease, true);
@@ -22,14 +31,14 @@ test("release plan fixes package order and prerelease tag", async () => {
   );
   assert.equal(
     plan.packages.at(-1)?.filename,
-    "disusered-okf-cli-1.0.0-rc.1.tgz",
+    `disusered-okf-cli-${VERSION}.tgz`,
   );
 });
 
 test("release plan rejects a tag that does not match the package version", async () => {
   await assert.rejects(
-    loadReleasePlan({ tag: "v1.0.0" }),
-    /release tag must be v1\.0\.0-rc\.1/,
+    loadReleasePlan({ tag: "v0.0.0-not-the-version" }),
+    new RegExp(`release tag must be ${TAG.replace(/[.\-+]/g, "\\$&")}`),
   );
 });
 

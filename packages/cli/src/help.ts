@@ -22,6 +22,7 @@ Options:
                    Load a consumer-owned module exporting profile
   --preview-id ID  Apply the exact canonical change reviewed by preview
   --strict         Make OKF guidance warnings fail validation
+  --today DATE     Evaluate stale_after against YYYY-MM-DD; omit to stay reproducible
   --limit NUMBER   Limit search results
   --out FILE       Visualization output path
   --input FILE|-   JSON change request (default: stdin)

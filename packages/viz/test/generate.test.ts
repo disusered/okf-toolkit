@@ -257,3 +257,142 @@ test("unknown analysis schema is rejected", () => {
     (error: unknown) => error instanceof GeneratorError && /unsupported analysis schema/.test(error.message),
   );
 });
+
+/** A node with explicit trust signals, for the projection tests below. */
+function signalNode(
+  path: string,
+  overrides: Partial<BundleGraphNode>,
+): BundleGraphNode {
+  return { ...node(path, path, "Concept"), ...overrides };
+}
+
+function signalDocument(path: string, staleAfter: string | null): AnalyzedDocument {
+  const base = document(path, path, "Concept", `# ${path}\n`);
+  return { ...base, derived: { ...base.derived, staleAfter } };
+}
+
+test("trust signals reach the projection instead of being discarded", () => {
+  const documents = [signalDocument("concepts/a.md", "2026-01-01")];
+  const nodes = [signalNode("concepts/a.md", {
+    trustTier: "human-reviewed",
+    stale: true,
+    tags: ["vendor-limits", "pricing"],
+    status: "stable",
+  })];
+  const graph = toVisualizationGraph(analysis(documents, nodes, []));
+  const projected = graph.nodes.find((entry) => entry.path === "concepts/a.md");
+
+  assert.equal(projected?.trustTier, "human-reviewed");
+  assert.equal(projected?.stale, true);
+  assert.equal(projected?.staleAfter, "2026-01-01");
+  assert.deepEqual(projected?.tags, ["vendor-limits", "pricing"]);
+  assert.equal(projected?.pending, false);
+});
+
+test("trust facets are ranked, and other facets sorted, over authored pages only", () => {
+  const documents = [
+    signalDocument("concepts/a.md", null),
+    signalDocument("concepts/b.md", null),
+  ];
+  const nodes = [
+    signalNode("concepts/a.md", { trustTier: "unverified", status: "draft", tags: ["z", "a"] }),
+    signalNode("concepts/b.md", { trustTier: "human-reviewed", status: "stable", tags: ["a"] }),
+  ];
+  const graph = toVisualizationGraph(analysis(documents, nodes, []));
+
+  // Trust is ordinal, so it is ranked rather than alphabetised.
+  assert.deepEqual(graph.trustTiers, ["human-reviewed", "unverified"]);
+  assert.deepEqual(graph.statuses, ["draft", "stable"]);
+  assert.deepEqual(graph.tags, ["a", "z"]);
+});
+
+test("a link to an unwritten page becomes a pending node rather than vanishing", () => {
+  const unwritten: AnalyzedLink = {
+    href: "concepts/later.md",
+    text: "later",
+    kind: "internal",
+    resolvedPath: "concepts/later.md",
+    fragment: null,
+    exists: false,
+    range: RANGE,
+  };
+  const base = document("concepts/a.md", "A", "Concept", "# A\n", [unwritten]);
+  const graph = toVisualizationGraph(
+    analysis([{ ...base, derived: { ...base.derived, staleAfter: null } }],
+      [signalNode("concepts/a.md", {})], []),
+  );
+
+  const pending = graph.nodes.find((entry) => entry.pending);
+  assert.equal(pending?.path, "concepts/later.md");
+  assert.equal(pending?.type, "Pending");
+  assert.ok(graph.edges.some((entry) => entry.relation === "pending"));
+  // The pending placeholder must not pollute the authored facets.
+  assert.ok(!graph.types.includes("Pending"));
+});
+
+test("omitting evaluatedAt leaves the page reproducible from the bundle alone", () => {
+  const documents = [signalDocument("concepts/a.md", null)];
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(documents, [signalNode("concepts/a.md", {})], []),
+  });
+  // The page script always contains the label literal; what matters is the payload it reads.
+  assert.match(html, /"evaluatedAt":null/);
+  assert.match(html, /<span class="muted" id="evaluated"><\/span>/);
+});
+
+test("evaluatedAt must be a real calendar date", () => {
+  const documents = [signalDocument("concepts/a.md", null)];
+  const input = analysis(documents, [signalNode("concepts/a.md", {})], []);
+  for (const bad of ["2026-8-31", "2026-02-30", "2026-08-31T00:00:00Z", "nonsense"]) {
+    assert.throws(
+      () => generateVisualization({ bundle: "b", analysis: input, evaluatedAt: bad }),
+      GeneratorError,
+      bad,
+    );
+  }
+});
+
+test("dating the page without dating the analysis is refused", () => {
+  // stale_after present but every verdict null means the caller forgot analyzeBundle({today}).
+  const documents = [signalDocument("concepts/a.md", "2026-01-01")];
+  const nodes = [signalNode("concepts/a.md", { stale: null })];
+  assert.throws(
+    () => generateVisualization({
+      bundle: "b",
+      analysis: analysis(documents, nodes, []),
+      evaluatedAt: "2026-08-31",
+    }),
+    /not evaluated against a date/,
+  );
+});
+
+test("the same triple always produces the same bytes", () => {
+  const documents = [signalDocument("concepts/a.md", "2026-01-01")];
+  const nodes = [signalNode("concepts/a.md", { stale: true })];
+  const input = { bundle: "b", analysis: analysis(documents, nodes, []), evaluatedAt: "2026-08-31" };
+  assert.equal(generateVisualization(input), generateVisualization(input));
+  // The date is an input, so changing it is expected to change the bytes.
+  assert.notEqual(
+    generateVisualization(input),
+    generateVisualization({ ...input, evaluatedAt: "2026-09-01" }),
+  );
+});
+
+test("the reader is laid out below the graph and can still scroll", () => {
+  const documents = [signalDocument("concepts/a.md", null)];
+  const html = generateVisualization({
+    bundle: "b",
+    analysis: analysis(documents, [signalNode("concepts/a.md", {})], []),
+  });
+  assert.ok(html.indexOf('id="graph"') < html.indexOf('id="split"'));
+  assert.ok(html.indexOf('id="split"') < html.indexOf('id="detail"'));
+  assert.match(html, /main \{ display: flex; flex-direction: column;/);
+  assert.match(html, /#detail \{[^}]*min-height: 0;[^}]*overflow-y: auto;/s);
+});
+
+test("browser storage is guarded and names no origin", () => {
+  assert.match(PAGE_SCRIPT, /okf\.viz\.prefs\.v1/);
+  assert.match(PAGE_SCRIPT, /try \{[\s\S]*localStorage[\s\S]*catch/);
+  assert.ok(!/iteramind|https?:\/\//i.test(PAGE_SCRIPT));
+});

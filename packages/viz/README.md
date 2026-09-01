@@ -26,3 +26,38 @@ result before it reaches the document.
 
 The same bundle name and analysis produce the same bytes. No timestamp,
 hostname, storage location, or runtime configuration enters the generator.
+
+## Trust and freshness
+
+The visualizer projects the trust signals `okf-core` derives and never re-derives them. Each
+node carries `trustTier`, `stale`, `staleAfter`, `tags`, and `status`; the page encodes trust
+as a border, staleness as a doubled amber border, and `deprecated` as reduced opacity. The
+reader always shows a Trust row, so an absent signal can never be read as verification.
+
+A filter appears only when the bundle actually varies on that facet. When it does not, the
+header says so outright — `21 pages, 34 relationships, all unverified` — because a hidden
+filter must not let a reader infer a review nobody performed.
+
+A link whose target nobody has written becomes a pending placeholder node rather than being
+dropped, so the graph shows the work the bundle has given itself.
+
+## Determinism and `evaluatedAt`
+
+`generateVisualization` is a pure function of `(bundle, analysis, evaluatedAt)`. The same
+triple always produces the same bytes, and the generator never reads a clock.
+
+`evaluatedAt` is optional. Omit it and the page is reproducible from the bundle alone, which
+is what `okf visualize` does unless `--today` is passed. Supply it — the same date passed to
+`analyzeBundle` as `today` — and the page can show staleness and prints the date it was judged
+against. It is an input rather than a field on the analysis so that `okf.inspect.v1` stays
+frozen; that schema is `additionalProperties: false` and is read across a process boundary.
+
+Passing `evaluatedAt` for an analysis that was never dated is refused, because it would print
+an evaluation date over no verdicts.
+
+## Browser storage
+
+Split orientation, split position and layout algorithm persist in `localStorage` under
+`okf.viz.prefs.v1`, keyed by bundle name. Every access is wrapped in `try`/`catch`: a page
+opened over `file://` throws on storage in some browsers. Filters and selection are
+deliberately not persisted — a remembered filter would hide pages added since the last visit.

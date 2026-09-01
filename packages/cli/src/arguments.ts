@@ -10,6 +10,8 @@ export interface CliArguments {
   readonly input?: string;
   readonly limit?: number;
   readonly debounce?: number;
+  /** Deterministic YYYY-MM-DD used for staleness. Never defaulted from the system clock. */
+  readonly today?: string;
   readonly strict: boolean;
   readonly help: boolean;
 }
@@ -23,6 +25,7 @@ const VALUE_OPTIONS = new Set([
   "--input",
   "--limit",
   "--debounce",
+  "--today",
 ]);
 
 export function parseArguments(argv: readonly string[]): CliArguments {
@@ -85,6 +88,13 @@ export function parseArguments(argv: readonly string[]): CliArguments {
   const limit = integerOption("--limit");
   const debounce = integerOption("--debounce");
 
+  // Fail here rather than relying on core's guidance warning: at a terminal a mistyped date
+  // should stop the command, not quietly leave every page unjudged.
+  const today = options["--today"];
+  if (today !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+    throw new Error("--today must be a YYYY-MM-DD date");
+  }
+
   return {
     command,
     subcommand,
@@ -97,6 +107,7 @@ export function parseArguments(argv: readonly string[]): CliArguments {
     ...(options["--input"] === undefined ? {} : { input: options["--input"] }),
     ...(limit === undefined ? {} : { limit }),
     ...(debounce === undefined ? {} : { debounce }),
+    ...(today === undefined ? {} : { today }),
     strict,
     help,
   };

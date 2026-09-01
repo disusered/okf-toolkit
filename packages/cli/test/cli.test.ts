@@ -194,3 +194,55 @@ test("stableJson preserves unknown prototype-shaped keys as own properties", () 
   assert.equal(result["constructor"], "authored");
   assert.equal(({} as Record<string, unknown>)["safe"], undefined);
 });
+
+const EXPIRING = `---
+type: Concept
+title: Expiring vendor fact
+description: A fact with a shelf life.
+stale_after: "2026-01-01"
+---
+
+# Expiring vendor fact
+`;
+
+test("--today evaluates stale_after; omitting it keeps the build reproducible", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "concepts", "expiring.md"), EXPIRING);
+  const parent = path.dirname(root);
+  const name = path.basename(root);
+
+  const undated = await invoke(parent, ["inspect", name, "--json"]);
+  const undatedNode = (JSON.parse(undated.stdout) as {
+    documents: Array<{ path: string; derived: { stale: boolean | null; staleAfter: string | null } }>;
+  }).documents.find((entry) => entry.path === "concepts/expiring.md");
+  assert.equal(undatedNode?.derived.staleAfter, "2026-01-01");
+  // Without a date there is no verdict to give.
+  assert.equal(undatedNode?.derived.stale, null);
+
+  const dated = await invoke(parent, ["inspect", name, "--json", "--today", "2026-08-31"]);
+  const datedNode = (JSON.parse(dated.stdout) as {
+    documents: Array<{ path: string; derived: { stale: boolean | null } }>;
+  }).documents.find((entry) => entry.path === "concepts/expiring.md");
+  assert.equal(datedNode?.derived.stale, true);
+});
+
+test("visualize is byte-identical across runs when no date is given", async () => {
+  const root = await fixture();
+  const parent = path.dirname(root);
+  const name = path.basename(root);
+  const first = path.join(root, "one.html");
+  const second = path.join(root, "two.html");
+
+  await invoke(parent, ["visualize", name, "--out", first]);
+  await invoke(parent, ["visualize", name, "--out", second]);
+  assert.equal(await readFile(first, "utf8"), await readFile(second, "utf8"));
+});
+
+test("a malformed --today stops the command instead of being ignored", async () => {
+  const root = await fixture();
+  const result = await invoke(path.dirname(root), [
+    "inspect", path.basename(root), "--json", "--today", "2026-8-31",
+  ]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.stdout + result.stderr, /--today must be a YYYY-MM-DD date/);
+});

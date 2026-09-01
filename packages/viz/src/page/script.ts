@@ -43,23 +43,75 @@ export const PAGE_SCRIPT = String.raw`
   var backList = document.getElementById("links-back");
   var searchInput = document.getElementById("search");
   var typeSelect = document.getElementById("type");
+  var trustSelect = document.getElementById("trust");
+  var statusSelect = document.getElementById("status");
+  var staleOnly = document.getElementById("stale-only");
+  var staleOnlyLabel = document.getElementById("stale-only-label");
   var layoutSelect = document.getElementById("layout");
+  var orientationSelect = document.getElementById("orientation");
+  var trustEl = document.getElementById("detail-trust");
+  var staleTerm = document.getElementById("dt-stale");
+  var staleEl = document.getElementById("detail-stale");
+  var tagsTerm = document.getElementById("dt-tags");
+  var tagsEl = document.getElementById("detail-tags");
+  var flagEl = document.getElementById("detail-flag");
+  var legendEl = document.getElementById("legend");
+  var mainEl = document.querySelector("main");
+  var splitEl = document.getElementById("split");
+
+  var TRUST_LABEL = {
+    "human-reviewed": "reviewed by a person",
+    "machine-confirmed": "confirmed by a machine only",
+    "unverified": "unverified"
+  };
+
+  var authored = graph.nodes.filter(function (node) { return !node.pending; });
+  var pendingCount = graph.nodes.length - authored.length;
 
   document.getElementById("bundle").textContent = payload.bundle;
-  document.getElementById("counts").textContent =
-    graph.nodes.length + " pages, " + graph.edges.length + " relationships";
+  var counts = authored.length + " pages, " + graph.edges.length + " relationships";
+  if (pendingCount) { counts += ", " + pendingCount + " not written yet"; }
+  // Say it outright when the whole bundle shares one trust tier. A filter with one option is
+  // noise, but silence would let a reader infer a verification nobody performed.
+  if (graph.trustTiers.length === 1) { counts += ", all " + graph.trustTiers[0]; }
+  document.getElementById("counts").textContent = counts;
 
-  graph.types.forEach(function (type) {
-    var option = document.createElement("option");
-    option.value = type;
-    option.textContent = type;
-    typeSelect.appendChild(option);
-  });
+  document.getElementById("evaluated").textContent =
+    payload.evaluatedAt ? "freshness evaluated " + payload.evaluatedAt : "";
+
+  function fillSelect(select, values, labeler) {
+    values.forEach(function (value) {
+      var option = document.createElement("option");
+      option.value = value;
+      option.textContent = labeler ? labeler(value) : value;
+      select.appendChild(option);
+    });
+  }
+
+  fillSelect(typeSelect, graph.types);
+  fillSelect(trustSelect, graph.trustTiers, function (t) { return TRUST_LABEL[t] || t; });
+  fillSelect(statusSelect, graph.statuses);
+
+  // Only offer a facet the bundle actually varies on.
+  trustSelect.hidden = graph.trustTiers.length < 2;
+  statusSelect.hidden = graph.statuses.length < 2;
+  var anyStale = graph.nodes.some(function (node) { return node.stale === true; });
+  staleOnlyLabel.hidden = !anyStale;
+  legendEl.hidden = graph.trustTiers.length < 2 && !anyStale && !pendingCount;
 
   var cy = cytoscape({
     container: document.getElementById("graph"),
     elements: graph.nodes.map(function (node) {
-      return { data: { id: node.id, label: node.title, color: node.color, size: node.size } };
+      var classes = [];
+      if (node.trustTier === "human-reviewed") { classes.push("human"); }
+      if (node.trustTier === "machine-confirmed") { classes.push("machine"); }
+      if (node.stale === true) { classes.push("stale"); }
+      if (node.status === "deprecated") { classes.push("deprecated"); }
+      if (node.pending) { classes.push("pending"); }
+      return {
+        data: { id: node.id, label: node.title, color: node.color, size: node.size },
+        classes: classes.join(" ")
+      };
     }).concat(graph.edges.map(function (edge) {
       return { data: { id: edge.id, source: edge.source, target: edge.target, relation: edge.relation } };
     })),
@@ -79,6 +131,11 @@ export const PAGE_SCRIPT = String.raw`
           "height": "data(size)"
         }
       },
+      { selector: "node.machine", style: { "border-width": 2, "border-style": "dashed", "border-color": "#64748b" } },
+      { selector: "node.human", style: { "border-width": 2, "border-style": "solid", "border-color": "#0f172a" } },
+      { selector: "node.stale", style: { "border-width": 3, "border-style": "double", "border-color": "#b45309" } },
+      { selector: "node.deprecated", style: { "opacity": 0.45 } },
+      { selector: "node.pending", style: { "opacity": 0.5, "border-width": 1, "border-style": "dotted", "border-color": "#94a3b8" } },
       { selector: "node:selected", style: { "border-width": 4, "border-color": "#b45309" } },
       {
         selector: "edge",
@@ -92,22 +149,122 @@ export const PAGE_SCRIPT = String.raw`
         }
       },
       { selector: 'edge[relation = "source"]', style: { "line-style": "dashed" } },
+      { selector: 'edge[relation = "pending"]', style: { "line-style": "dotted", "opacity": 0.6 } },
       { selector: "edge:selected", style: { "line-color": "#b45309", "target-arrow-color": "#b45309", "width": 2.4 } },
       { selector: ".dim", style: { "opacity": 0.12 } }
     ],
     layout: { name: "cose", animate: false, padding: 36 }
   });
 
+  // Layout preferences live in localStorage, keyed generically so the page carries no origin.
+  // Every access is guarded: a file:// page throws SecurityError on storage in some browsers.
+  var PREFS_KEY = "okf.viz.prefs.v1";
+
+  function readPrefs() {
+    try {
+      var all = JSON.parse(window.localStorage.getItem(PREFS_KEY) || "{}");
+      return (all && all[payload.bundle]) || {};
+    } catch (error) { return {}; }
+  }
+
+  function writePrefs(patch) {
+    try {
+      var all = JSON.parse(window.localStorage.getItem(PREFS_KEY) || "{}");
+      if (!all || typeof all !== "object") { all = {}; }
+      var current = all[payload.bundle] || {};
+      for (var key in patch) { current[key] = patch[key]; }
+      all[payload.bundle] = current;
+      window.localStorage.setItem(PREFS_KEY, JSON.stringify(all));
+    } catch (error) { /* storage is a convenience; never let it break the page */ }
+  }
+
+  function setSplit(percent) {
+    var clamped = Math.max(20, Math.min(85, percent));
+    mainEl.style.setProperty("--split", clamped + "%");
+    splitEl.setAttribute("aria-valuenow", String(Math.round(clamped)));
+    return clamped;
+  }
+
+  function setOrientation(value) {
+    if (value === "columns") { mainEl.setAttribute("data-orientation", "columns"); }
+    else { mainEl.removeAttribute("data-orientation"); }
+    orientationSelect.value = value;
+    splitEl.setAttribute("aria-orientation", value === "columns" ? "vertical" : "horizontal");
+  }
+
+  var prefs = readPrefs();
+  setOrientation(prefs.orientation === "columns" ? "columns" : "rows");
+  setSplit(typeof prefs.split === "number" ? prefs.split : 55);
+  if (prefs.layout && prefs.layout !== layoutSelect.value) {
+    layoutSelect.value = prefs.layout;
+    cy.layout({ name: prefs.layout, animate: false, padding: 36 }).run();
+  }
+
+  orientationSelect.addEventListener("change", function () {
+    setOrientation(orientationSelect.value);
+    writePrefs({ orientation: orientationSelect.value });
+    cy.resize();
+  });
+
+  var dragging = false;
+
+  splitEl.addEventListener("pointerdown", function (event) {
+    dragging = true;
+    splitEl.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  splitEl.addEventListener("pointermove", function (event) {
+    if (!dragging) { return; }
+    var box = mainEl.getBoundingClientRect();
+    var columns = mainEl.getAttribute("data-orientation") === "columns";
+    var percent = columns
+      ? ((event.clientX - box.left) / box.width) * 100
+      : ((event.clientY - box.top) / box.height) * 100;
+    setSplit(percent);
+  });
+
+  splitEl.addEventListener("pointerup", function (event) {
+    if (!dragging) { return; }
+    dragging = false;
+    splitEl.releasePointerCapture(event.pointerId);
+    writePrefs({ split: Number(splitEl.getAttribute("aria-valuenow")) });
+  });
+
+  splitEl.addEventListener("keydown", function (event) {
+    var now = Number(splitEl.getAttribute("aria-valuenow"));
+    var next = event.key === "ArrowUp" || event.key === "ArrowLeft" ? now - 2
+      : event.key === "ArrowDown" || event.key === "ArrowRight" ? now + 2
+      : event.key === "Home" ? 20
+      : event.key === "End" ? 85
+      : null;
+    if (next === null) { return; }
+    event.preventDefault();
+    writePrefs({ split: setSplit(next) });
+  });
+
+  // Resize the canvas, but never re-fit: dragging the splitter must not throw away the
+  // reader's pan and zoom.
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(function () { cy.resize(); }).observe(document.getElementById("graph"));
+  }
+
   cy.on("tap", "node", function (event) { showNode(event.target.id()); });
   cy.on("tap", function (event) { if (event.target === cy) { clearSelection(); } });
 
   layoutSelect.addEventListener("change", function () {
     cy.layout({ name: layoutSelect.value, animate: false, padding: 36 }).run();
+    writePrefs({ layout: layoutSelect.value });
   });
 
   document.getElementById("reset").addEventListener("click", function () {
     searchInput.value = "";
     typeSelect.value = "";
+    trustSelect.value = "";
+    statusSelect.value = "";
+    staleOnly.checked = false;
+    setOrientation("rows");
+    setSplit(55);
     applyFilters();
     cy.fit(undefined, 36);
     clearSelection();
@@ -115,6 +272,9 @@ export const PAGE_SCRIPT = String.raw`
 
   searchInput.addEventListener("input", applyFilters);
   typeSelect.addEventListener("change", applyFilters);
+  trustSelect.addEventListener("change", applyFilters);
+  statusSelect.addEventListener("change", applyFilters);
+  staleOnly.addEventListener("change", applyFilters);
 
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") { clearSelection(); }
@@ -123,11 +283,19 @@ export const PAGE_SCRIPT = String.raw`
   function applyFilters() {
     var query = searchInput.value.trim().toLowerCase();
     var type = typeSelect.value;
+    var trust = trustSelect.value;
+    var status = statusSelect.value;
+    var onlyStale = staleOnly.checked;
     cy.nodes().forEach(function (element) {
       var node = nodeById[element.id()];
       var matches = !type || node.type === type;
+      if (matches && trust) { matches = node.trustTier === trust; }
+      if (matches && status) { matches = node.status === status; }
+      if (matches && onlyStale) { matches = node.stale === true; }
       if (matches && query) {
-        var haystack = (node.title + " " + node.path + " " + node.description).toLowerCase();
+        var haystack = (
+          node.title + " " + node.path + " " + node.description + " " + node.tags.join(" ")
+        ).toLowerCase();
         matches = haystack.indexOf(query) !== -1;
       }
       element.toggleClass("dim", !matches);
@@ -159,7 +327,41 @@ export const PAGE_SCRIPT = String.raw`
     titleEl.textContent = node.title;
     pathEl.textContent = node.path;
     descriptionEl.textContent = node.description || "—";
-    statusEl.textContent = node.status || "—";
+    statusEl.textContent = node.status || (node.pending ? "not written yet" : "—");
+
+    // Trust is always shown. An absent row would read as an omission, and a reader must never
+    // be able to infer "verified" from silence.
+    trustEl.textContent = TRUST_LABEL[node.trustTier] || node.trustTier;
+
+    var flag = node.pending ? "Pending" : node.stale === true ? "Stale"
+      : node.status === "deprecated" ? "Deprecated" : "";
+    flagEl.textContent = flag;
+    flagEl.hidden = !flag;
+
+    var staleText = "";
+    if (node.staleAfter) {
+      staleText = node.staleAfter;
+      if (node.stale === true) { staleText += " — passed"; }
+      else if (node.stale === false) { staleText += " — current as of " + payload.evaluatedAt; }
+    }
+    staleTerm.hidden = !staleText;
+    staleEl.hidden = !staleText;
+    staleEl.textContent = staleText;
+
+    tagsTerm.hidden = !node.tags.length;
+    tagsEl.hidden = !node.tags.length;
+    tagsEl.replaceChildren();
+    node.tags.forEach(function (tag) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "tag";
+      button.textContent = tag;
+      button.addEventListener("click", function () {
+        searchInput.value = tag;
+        applyFilters();
+      });
+      tagsEl.appendChild(button);
+    });
 
     sourcesEl.replaceChildren();
     if (node.sources.length) {

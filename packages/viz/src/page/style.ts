@@ -69,22 +69,44 @@ header {
 .controls button { cursor: pointer; }
 .controls button:hover { border-color: var(--muted); }
 
-main { display: flex; flex: 1; min-height: 0; }
+/*
+ * Rows by default: the graph above, the reader below. A side-by-side split makes long Markdown
+ * a narrow column, which is harder to read than it is to scan. --split drives the graph's
+ * share in both orientations, so the toggle only has to change flex-direction.
+ */
+main { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 #graph {
-  flex: 1 1 60%;
+  flex: 0 0 var(--split, 55%);
+  min-height: 160px;
   min-width: 0;
   background: var(--panel);
-  border-right: 1px solid var(--line);
 }
 
+#split {
+  flex: 0 0 6px;
+  background: var(--line);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+#split:hover, #split:focus-visible { background: var(--accent); outline: none; }
+
+/* min-height:0 is what lets the reader scroll instead of growing past the viewport. */
 #detail {
-  flex: 0 0 38%;
-  min-width: 300px;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   padding: 18px 22px;
   background: var(--panel);
+  border-top: 1px solid var(--line);
 }
+
+main[data-orientation="columns"] { flex-direction: row; }
+main[data-orientation="columns"] > #graph { flex: 0 0 var(--split, 55%); min-height: 0; }
+main[data-orientation="columns"] > #split { cursor: col-resize; }
+main[data-orientation="columns"] > #detail { border-top: 0; border-left: 1px solid var(--line); }
 
 #detail h1 { font-size: 19px; margin: 6px 0 2px; }
 #detail h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 22px 0 6px; }
@@ -158,9 +180,52 @@ ul.plain .muted { display: block; font-family: ui-monospace, SFMono-Regular, Men
 
 .empty { color: var(--muted); margin-top: 40px; text-align: center; }
 
+.chip.warn { background: var(--accent); margin-left: 6px; }
+
+.tag {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 7px;
+  margin: 0 4px 4px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--code);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.tag:hover { border-color: var(--accent); }
+
+#legend { flex-basis: 100%; font-size: 12px; }
+#legend summary { cursor: pointer; }
+#legend ul { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0 0; color: var(--muted); }
+
+.ring {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: -1px;
+  background: var(--muted);
+}
+
+.ring.human { box-shadow: 0 0 0 2px var(--ink); }
+.ring.machine { box-shadow: 0 0 0 2px var(--muted); }
+.ring.none { opacity: .55; }
+.ring.stale { box-shadow: 0 0 0 3px var(--accent); }
+.ring.faded { opacity: .35; }
+
+/* Narrow viewports force rows however the toggle is set; columns needs width to earn its keep. */
 @media (max-width: 820px) {
-  main { flex-direction: column; }
-  #graph { flex: 1 1 50%; border-right: none; border-bottom: 1px solid var(--line); }
-  #detail { flex: 1 1 50%; min-width: 0; }
+  main[data-orientation="columns"] { flex-direction: column; }
+  main[data-orientation="columns"] > #graph { flex: 0 0 var(--split, 55%); min-height: 160px; }
+  main[data-orientation="columns"] > #split { cursor: row-resize; }
+  main[data-orientation="columns"] > #detail { border-top: 1px solid var(--line); border-left: 0; }
+}
+
+/* A short viewport gives the reader more room; 55% of 600px is not a usable reading pane. */
+@media (max-height: 620px) {
+  main:not([data-orientation="columns"]) > #graph { flex-basis: 40%; }
 }
 `;

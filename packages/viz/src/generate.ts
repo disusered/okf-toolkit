@@ -11,6 +11,15 @@ export interface VisualizationInput {
   /** Display name only. Bundle selection and loading happen before this call. */
   readonly bundle: string;
   readonly analysis: BundleAnalysis;
+  /**
+   * The date the analysis was evaluated against, as `YYYY-MM-DD`, or null.
+   *
+   * This is an input rather than a field on the analysis, so `okf.inspect.v1` stays frozen.
+   * Pass the same date here that you passed to `analyzeBundle` as `today`; the page prints it
+   * so a reader knows what "stale" was judged against. Omit it and the page is reproducible
+   * from the bundle alone.
+   */
+  readonly evaluatedAt?: string | null;
 }
 
 export class GeneratorError extends Error {
@@ -36,6 +45,25 @@ function jsonForScript(value: unknown): string {
     .replace(/&/g, "\\u0026")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Reject anything but a bare calendar date, so a timestamp cannot leak into a stable page. */
+function assertEvaluatedAt(value: string): void {
+  const invalid = (): never => {
+    throw new GeneratorError(`evaluatedAt must be a YYYY-MM-DD calendar date: ${value}`);
+  };
+  if (!ISO_DATE.test(value)) invalid();
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    invalid();
+  }
 }
 
 function assertInlinable(name: string, source: string): void {
@@ -69,8 +97,22 @@ export function generateVisualization(input: VisualizationInput): string {
   assertInlinable("dompurify", DOMPURIFY_SOURCE);
   assertInlinable("the page script", PAGE_SCRIPT);
 
+  const evaluatedAt = input.evaluatedAt ?? null;
+  if (evaluatedAt !== null) {
+    assertEvaluatedAt(evaluatedAt);
+    // A date with no verdicts behind it would print "evaluated <date>" over nothing. That only
+    // happens when the caller dated the page but not the analysis, which is worth refusing.
+    const dated = input.analysis.documents.some((document) => document.derived.staleAfter !== null);
+    const judged = input.analysis.graph.nodes.some((node) => node.stale !== null);
+    if (dated && !judged) {
+      throw new GeneratorError(
+        "analysis was not evaluated against a date; pass the same today to analyzeBundle",
+      );
+    }
+  }
+
   const graph = toVisualizationGraph(input.analysis);
-  const payload = jsonForScript({ bundle: input.bundle, graph });
+  const payload = jsonForScript({ bundle: input.bundle, evaluatedAt, graph });
   const title = escapeText(`${input.bundle} — OKF graph`);
 
   return `<!DOCTYPE html>
@@ -87,12 +129,20 @@ export function generateVisualization(input: VisualizationInput): string {
   <div class="brand">
     <strong id="bundle"></strong>
     <span class="muted" id="counts"></span>
+    <span class="muted" id="evaluated"></span>
   </div>
   <div class="controls">
-    <input id="search" type="search" placeholder="Search title, path, or description" autocomplete="off">
+    <input id="search" type="search" placeholder="Search title, path, tag, or description" autocomplete="off">
     <select id="type" aria-label="Filter by type">
       <option value="">All types</option>
     </select>
+    <select id="trust" aria-label="Filter by trust" hidden>
+      <option value="">All trust</option>
+    </select>
+    <select id="status" aria-label="Filter by status" hidden>
+      <option value="">All statuses</option>
+    </select>
+    <label id="stale-only-label" hidden><input id="stale-only" type="checkbox"> Stale only</label>
     <select id="layout" aria-label="Layout">
       <option value="cose">Force</option>
       <option value="concentric">Concentric</option>
@@ -100,21 +150,40 @@ export function generateVisualization(input: VisualizationInput): string {
       <option value="circle">Circle</option>
       <option value="grid">Grid</option>
     </select>
+    <select id="orientation" aria-label="Split orientation">
+      <option value="rows">Rows</option>
+      <option value="columns">Columns</option>
+    </select>
     <button id="reset" type="button">Reset view</button>
   </div>
+  <details id="legend">
+    <summary class="muted">Key</summary>
+    <ul class="plain">
+      <li><span class="ring human"></span> reviewed by a person</li>
+      <li><span class="ring machine"></span> confirmed by a machine only</li>
+      <li><span class="ring none"></span> unverified</li>
+      <li><span class="ring stale"></span> past its <code>stale_after</code></li>
+      <li><span class="ring faded"></span> deprecated, or not yet written</li>
+    </ul>
+  </details>
 </header>
 
 <main>
   <section id="graph" aria-label="Bundle graph"></section>
+  <div id="split" role="separator" aria-orientation="horizontal" aria-label="Resize" tabindex="0"></div>
   <aside id="detail">
     <p id="detail-empty" class="empty">Select a page in the graph.</p>
     <article id="detail-content" hidden>
       <span class="chip" id="detail-type"></span>
+      <span class="chip warn" id="detail-flag" hidden></span>
       <h1 id="detail-title"></h1>
       <p class="path" id="detail-path"></p>
       <dl>
         <dt>Description</dt><dd id="detail-description"></dd>
         <dt>Status</dt><dd id="detail-status"></dd>
+        <dt>Trust</dt><dd id="detail-trust"></dd>
+        <dt id="dt-stale" hidden>Stale after</dt><dd id="detail-stale" hidden></dd>
+        <dt id="dt-tags" hidden>Tags</dt><dd id="detail-tags" hidden></dd>
         <dt>Sources</dt><dd id="detail-sources"></dd>
       </dl>
       <hr>
