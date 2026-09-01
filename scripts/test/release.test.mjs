@@ -12,11 +12,18 @@ const VERSION = JSON.parse(
 ).version;
 const TAG = `v${VERSION}`;
 
+/*
+ * The dist tag and the prerelease flag are derived from the version too, so naming
+ * either literally reintroduces the same coupling one level up: `1.0.0` publishes to
+ * `latest`, and every `-rc.N` before it published to `next`.
+ */
+const PRERELEASE = parseVersion(VERSION).prerelease;
+
 test("release plan fixes package order and prerelease tag", async () => {
   const plan = await loadReleasePlan({ tag: TAG });
-  assert.equal(plan.distTag, "next");
+  assert.equal(plan.distTag, PRERELEASE ? "next" : "latest");
   assert.equal(plan.packageManager, "pnpm@10.28.2");
-  assert.equal(plan.prerelease, true);
+  assert.equal(plan.prerelease, PRERELEASE);
   assert.deepEqual(
     plan.packages.map(({ name }) => name),
     [

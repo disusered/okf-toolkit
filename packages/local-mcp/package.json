@@ -1,6 +1,6 @@
 {
   "name": "okf-local-mcp",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0",
   "description": "Local stdio and loopback HTTP MCP server for one filesystem OKF bundle",
   "type": "module",
   "repository": {
