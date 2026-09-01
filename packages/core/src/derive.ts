@@ -425,11 +425,12 @@ export function deriveDocumentFields(
   body: string,
   path: string,
   knownPaths: ReadonlySet<string>,
+  nonDocumentPaths: ReadonlySet<string>,
   today: string | null,
 ): { readonly derived: DerivedDocumentFields; readonly guidance: readonly Diagnostic[] } {
   const guidance: Diagnostic[] = [];
   checkTrustAndLifecycle(metadata, path, guidance);
-  checkContractPaths(metadata, path, knownPaths, guidance);
+  checkContractPaths(metadata, path, knownPaths, nonDocumentPaths, guidance);
 
   const tagsValue = metadata["tags"];
   let tags: readonly string[] = [];
@@ -479,21 +480,27 @@ export function deriveDocumentFields(
 }
 
 
-/**
- * Resolve the path-valued fields of an Attested Computation. The spec lists `computation`,
- * `executor.resource` and `attester.resource` alongside `sources[].resource` as fields that
- * name a file, but only source resources were resolved, so a broken executor path passed
- * without comment.
- */
 /** Like `mapping`, but yields the record so its keys can be read. */
 function asMapping(value: unknown): Readonly<Record<string, unknown>> | null {
   return mapping(value) ? value : null;
 }
 
+/**
+ * Resolve the path-valued fields of an Attested Computation. The spec lists `computation`,
+ * `executor.resource` and `attester.resource` alongside `sources[].resource` as fields that
+ * name a file, but only source resources were resolved, so a broken executor path passed
+ * without comment.
+ *
+ * These three name a file rather than a page: a `computation` is a query, an `attester.resource`
+ * is a script. So a target counts as resolved when it is either a loaded document or a bundle
+ * file the loader saw without parsing. `sources[].resource` is deliberately not treated this
+ * way — a source naming an unwritten `.md` page is the corpus's to-do list, and keeps reporting.
+ */
 function checkContractPaths(
   metadata: Readonly<Record<string, unknown>>,
   path: string,
   knownPaths: ReadonlySet<string>,
+  nonDocumentPaths: ReadonlySet<string>,
   guidance: Diagnostic[],
 ): void {
   const executor = asMapping(metadata["executor"]);
@@ -520,7 +527,11 @@ function checkContractPaths(
           `${label} escapes the bundle: ${target}`,
         ),
       );
-    } else if (resolution.kind === "internal" && !knownPaths.has(resolution.path)) {
+    } else if (
+      resolution.kind === "internal"
+      && !knownPaths.has(resolution.path)
+      && !nonDocumentPaths.has(resolution.path)
+    ) {
       guidance.push(
         diagnostic(
           "guidance",

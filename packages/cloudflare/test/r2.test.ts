@@ -55,6 +55,43 @@ test("the adapter lists only Markdown under its one configured prefix", async ()
   ]);
 });
 
+test("the listing reports the objects under the prefix that are not documents", async () => {
+  const { bucket } = memoryBucket({
+    "shared/index.md": '---\nokf_version: "0.2"\n---\n\n# Index\n',
+    "shared/computations/clubs.md": `---
+type: Attested Computation
+title: Club count
+description: How many clubs there are.
+runtime: postgres
+computation: ../references/clubs.sql
+---
+
+# Club count
+`,
+    "shared/references/clubs.sql": "select count(*) from clubs;\n",
+    "shared/a//b.json": "{}",
+  });
+  const adapter = new R2BundleAdapter(bucket, { bundle: "shared", prefix: "shared" });
+  const listing = await adapter.listing();
+
+  assert.deepEqual(listing.documents.map((document) => document.path), [
+    "computations/clubs.md",
+    "index.md",
+  ]);
+  // An object whose key is not a confined bundle path is never what a contract resolved to.
+  assert.deepEqual([...listing.nonDocumentPaths], ["references/clubs.sql"]);
+  assert.deepEqual(
+    analyzeBundle(listing.documents, { nonDocumentPaths: listing.nonDocumentPaths })
+      .diagnostics.guidance.filter((entry) => entry.code.startsWith("guidance.contract.")),
+    [],
+  );
+  assert.ok(
+    analyzeBundle(listing.documents).diagnostics.guidance
+      .some((entry) => entry.code === "guidance.contract.broken"),
+    "the query only resolves because the listing reported it",
+  );
+});
+
 test("bundle paths cannot escape or alias the prefix", () => {
   assert.equal(confinedBundlePath("concepts/a.md"), "concepts/a.md");
   assert.equal(confinedBundlePath(" concepts/a.md"), " concepts/a.md");

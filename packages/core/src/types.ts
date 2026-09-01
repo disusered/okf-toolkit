@@ -29,6 +29,14 @@ export interface ValidationProfile {
 export interface AnalyzeBundleOptions {
   /** Deterministic ISO date used for staleness. Omit rather than consulting the clock. */
   readonly today?: string;
+  /**
+   * The bundle files that are not OKF documents: the query an Attested Computation runs, the
+   * script its attester executes. The analysis never opens them, it only needs to know they
+   * exist so a contract path that names one resolves. Paths take the same shape as
+   * `AnalyzedDocument.path` — bundle-root-relative, forward slashes — so the two sets compare
+   * directly. Omit it and only loaded documents are known, which is the previous behaviour.
+   */
+  readonly nonDocumentPaths?: ReadonlySet<string>;
   readonly profile?: ValidationProfile;
 }
 
@@ -39,6 +47,8 @@ export interface ParsedDocumentResult {
 
 export interface ParseDocumentOptions {
   readonly knownPaths?: ReadonlySet<string>;
+  /** Bundle files that are not documents; see `AnalyzeBundleOptions.nonDocumentPaths`. */
+  readonly nonDocumentPaths?: ReadonlySet<string>;
   readonly today?: string;
 }
 

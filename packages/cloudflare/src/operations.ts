@@ -25,6 +25,7 @@ import {
   R2BundleAdapter,
   R2BundleError,
   type R2BucketLike,
+  type R2BundleListing,
 } from "./r2.js";
 
 export interface OkfContextDocument {
@@ -200,14 +201,23 @@ function listedPaths(documents: readonly RawBundleDocument[], requested: string,
 
 /** Create all versioned MCP operations for one R2 bundle. */
 export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV1Operations {
-  const analyze = async () => analyzeBundle(await options.adapter.documents(), options.analysis);
+  /** The analysis options plus what this listing saw that is not a document. */
+  const withFiles = (listing: R2BundleListing): AnalyzeBundleOptions => ({
+    ...options.analysis,
+    nonDocumentPaths: listing.nonDocumentPaths,
+  });
+
+  const analyze = async () => {
+    const listing = await options.adapter.listing();
+    return analyzeBundle(listing.documents, withFiles(listing));
+  };
 
   const previewFromDocuments = async (
     change: Change,
-    current: readonly RawBundleDocument[],
+    listing: R2BundleListing,
   ): Promise<ChangePreview> => {
-    const proposed = proposedDocuments(current, change);
-    const analysis = analyzeBundle(proposed.documents, options.analysis);
+    const proposed = proposedDocuments(listing.documents, change);
+    const analysis = analyzeBundle(proposed.documents, withFiles(listing));
     const diagnostics = [...proposed.diagnostics, ...allDiagnostics(analysis)];
     return {
       schema: OPERATIONS_SCHEMA,
@@ -222,8 +232,7 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
 
   const preview = async (input: Change): Promise<ChangePreview> => {
     const change = parseChange(input);
-    const current = await options.adapter.documents();
-    return previewFromDocuments(change, current);
+    return previewFromDocuments(change, await options.adapter.listing());
   };
 
   const rejected = (
@@ -240,13 +249,13 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
   const unchanged = (
     change: Change,
     revisions: Readonly<Record<string, Revision | null>>,
-    current: readonly RawBundleDocument[],
+    listing: R2BundleListing,
   ): ChangeResult => ({
     schema: OPERATIONS_SCHEMA,
     outcome: "unchanged",
     operation: change.operation,
     revisions,
-    diagnostics: allDiagnostics(analyzeBundle(current, options.analysis)),
+    diagnostics: allDiagnostics(analyzeBundle(listing.documents, withFiles(listing))),
   });
 
   return {
@@ -327,20 +336,21 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
         )]);
       }
 
-      const current = await options.adapter.documents();
+      const listing = await options.adapter.listing();
+      const current = listing.documents;
       if (change.operation === "create") {
         const existing = documentAt(current, change.path);
         if (existing?.content === change.content) {
-          return unchanged(change, { [change.path]: existing.revision ?? null }, current);
+          return unchanged(change, { [change.path]: existing.revision ?? null }, listing);
         }
       } else if (change.operation === "update") {
         const existing = documentAt(current, change.path);
         if (existing?.content === change.content) {
-          return unchanged(change, { [change.path]: existing.revision ?? null }, current);
+          return unchanged(change, { [change.path]: existing.revision ?? null }, listing);
         }
       } else if (change.operation === "delete") {
         if (!documentAt(current, change.path)) {
-          return unchanged(change, { [change.path]: null }, current);
+          return unchanged(change, { [change.path]: null }, listing);
         }
       } else {
         const state = await options.adapter.moveState(change, expectedPreviewId);
@@ -348,7 +358,7 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
           return unchanged(
             change,
             { [change.from_path]: null, [change.to_path]: state.destination.revision },
-            current,
+            listing,
           );
         }
         if (state.destinationOwned && state.destination) {
@@ -372,7 +382,7 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
             )]);
           }
           const desired = current.filter((document) => document.path !== change.from_path);
-          const diagnostics = allDiagnostics(analyzeBundle(desired, options.analysis));
+          const diagnostics = allDiagnostics(analyzeBundle(desired, withFiles(listing)));
           if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
             return rejected(change, diagnostics);
           }
@@ -394,7 +404,7 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
         }
       }
 
-      const checked = await previewFromDocuments(change, current);
+      const checked = await previewFromDocuments(change, listing);
       if (!checked.passed) {
         return rejected(change, checked.diagnostics);
       }

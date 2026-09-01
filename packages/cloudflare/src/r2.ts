@@ -46,6 +46,16 @@ export interface StoredBundleDocument extends RawBundleDocument {
   readonly customMetadata: Readonly<Record<string, string>>;
 }
 
+/**
+ * One pass over a bundle prefix. Nothing stops an object that is not a document from living
+ * under the prefix — `documents()` has always skipped those keys — and an Attested Computation
+ * may name one, so the listing reports them alongside the documents it parses.
+ */
+export interface R2BundleListing {
+  readonly documents: readonly RawBundleDocument[];
+  readonly nonDocumentPaths: ReadonlySet<string>;
+}
+
 export interface R2MoveState {
   readonly source: StoredBundleDocument | null;
   readonly destination: StoredBundleDocument | null;
@@ -107,7 +117,12 @@ export class R2BundleAdapter {
   }
 
   async documents(): Promise<readonly RawBundleDocument[]> {
+    return (await this.listing()).documents;
+  }
+
+  async listing(): Promise<R2BundleListing> {
     const documents: RawBundleDocument[] = [];
+    const nonDocumentPaths = new Set<string>();
     let cursor: string | undefined;
     do {
       const page = await this.bucket.list({
@@ -117,7 +132,16 @@ export class R2BundleAdapter {
       });
       for (const object of page.objects) {
         const path = object.key.slice(this.prefix.length);
-        if (!path.endsWith(".md")) continue;
+        if (!path.endsWith(".md")) {
+          // A key that is not a confined bundle path can never be what a contract resolved to,
+          // and it is not a document, so record what is addressable and ignore the rest.
+          try {
+            nonDocumentPaths.add(confinedBundlePath(path));
+          } catch {
+            continue;
+          }
+          continue;
+        }
         const confined = confinedBundlePath(path);
         const body = await this.bucket.get(object.key);
         if (!body) continue;
@@ -128,7 +152,10 @@ export class R2BundleAdapter {
         throw new R2BundleError("R2 returned a truncated listing without a cursor");
       }
     } while (cursor !== undefined);
-    return documents.sort((left, right) => byCodePoint(left.path, right.path));
+    return {
+      documents: documents.sort((left, right) => byCodePoint(left.path, right.path)),
+      nonDocumentPaths,
+    };
   }
 
   async read(path: string): Promise<RawBundleDocument> {

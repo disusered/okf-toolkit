@@ -507,3 +507,117 @@ test("an untagged page is never asked for an expiry date", () => {
 
   assert.ok(!codes.includes("guidance.stale-after.perishable"));
 });
+
+test("a contract path that names a bundle file the loader saw is not broken", () => {
+  const codes = analyzeBundle(
+    [
+      { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+      {
+        path: "computations/clubs.md",
+        content: `---
+type: Attested Computation
+title: Club count
+description: How many clubs there are.
+runtime: postgres
+computation: ../references/computations/clubs.sql
+attester:
+  resource: ../references/attesters/clubs.mjs
+---
+
+# Club count
+`,
+      },
+    ],
+    {
+      nonDocumentPaths: new Set([
+        "references/attesters/clubs.mjs",
+        "references/computations/clubs.sql",
+      ]),
+    },
+  ).diagnostics.guidance.map((entry) => entry.code);
+
+  assert.ok(
+    !codes.includes("guidance.contract.broken"),
+    "a query and an attester script are files rather than pages, so neither is broken",
+  );
+});
+
+test("a contract path that names no file at all is still broken", () => {
+  const diagnostics = analyzeBundle(
+    [
+      { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+      {
+        path: "computations/clubs.md",
+        content: `---
+type: Attested Computation
+title: Club count
+description: Points at a query nobody wrote.
+runtime: postgres
+computation: ../references/computations/clubs.sql
+---
+
+# Club count
+`,
+      },
+    ],
+    { nonDocumentPaths: new Set(["references/computations/members.sql"]) },
+  ).diagnostics.guidance;
+
+  const broken = diagnostics.find((entry) => entry.code === "guidance.contract.broken");
+  assert.ok(broken, "knowing about other files must not excuse a path that resolves to none of them");
+  assert.match(broken!.message, /^computation does not resolve: \.\.\/references\/computations\/clubs\.sql$/);
+});
+
+test("a contract path that leaves the bundle escapes rather than resolving to a file", () => {
+  const diagnostics = analyzeBundle(
+    [
+      { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+      {
+        path: "computations/clubs.md",
+        content: `---
+type: Attested Computation
+title: Club count
+description: Points outside the bundle.
+runtime: postgres
+computation: ../../elsewhere/clubs.sql
+---
+
+# Club count
+`,
+      },
+    ],
+    { nonDocumentPaths: new Set(["elsewhere/clubs.sql"]) },
+  ).diagnostics.guidance;
+
+  const escape = diagnostics.find((entry) => entry.code === "guidance.contract.escape");
+  assert.ok(escape, "a path that leaves the bundle is an escape whatever the loader saw inside it");
+  assert.match(escape!.message, /^computation escapes the bundle: \.\.\/\.\.\/elsewhere\/clubs\.sql$/);
+  assert.ok(!diagnostics.some((entry) => entry.code === "guidance.contract.broken"));
+});
+
+test("a source resource naming an unwritten page still reports, whatever files exist", () => {
+  const diagnostics = analyzeBundle(
+    [
+      { path: "index.md", content: '---\nokf_version: "0.2"\n---\n\n# Index\n' },
+      {
+        path: "concepts/revenue.md",
+        content: `---
+type: Metric
+title: Revenue
+description: Cites a page that has not been written.
+sources:
+  - title: The pricing page
+    resource: ../references/pricing.md
+---
+
+# Revenue
+`,
+      },
+    ],
+    { nonDocumentPaths: new Set(["references/pricing.md"]) },
+  ).diagnostics.guidance;
+
+  const broken = diagnostics.find((entry) => entry.code === "guidance.source.broken");
+  assert.ok(broken, "a source naming an unwritten page is the corpus's to-do list, not a file reference");
+  assert.match(broken!.message, /^sources\[0\]\.resource does not resolve: \.\.\/references\/pricing\.md$/);
+});
