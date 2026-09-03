@@ -56,6 +56,28 @@ Add `--prerelease` for a SemVer prerelease such as `okf-viz@2.0.0-rc.1`.
 
 Publishing the GitHub release is the publication request.
 
+## Let the environment accept the tag
+
+The `npm-release` environment restricts which refs may deploy to it, and that rule
+lives in GitHub settings rather than in this repository. Nothing here can test it:
+`pnpm check` passes, the build job passes, the tarball is packed and verified, and
+the deploy is then rejected in about two seconds before a single step runs.
+
+Under **Settings → Environments → npm-release → Deployment branches and tags**, the
+allowed tag patterns must cover the release tag format. Two rules cover every
+package, present and future:
+
+```
+okf-*@*
+@disusered/okf-cli@*
+```
+
+Two rules are needed rather than one because a deployment pattern's `*` does not
+match `/`, and the CLI's name carries a scope. A `v*` rule from before per-package
+versioning is harmless to leave in place, and matches nothing that is released now.
+
+**Adding a package means adding its pattern**, unless its name starts with `okf-`.
+
 ## GitHub Actions release
 
 The release workflow separates building, npm publication, and GitHub release
