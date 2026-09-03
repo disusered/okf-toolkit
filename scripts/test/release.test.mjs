@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   loadReleasePlan,
+  packageStem,
   packFilename,
   parseReleaseTag,
   parseVersion,
@@ -48,25 +49,34 @@ test("the workspace check validates every package without a tag", async () => {
 });
 
 test("a tag resolves exactly one package to release", async () => {
-  const plan = await loadReleasePlan({ tag: `okf-viz@${VIZ_VERSION}` });
+  const plan = await loadReleasePlan({ tag: `v-okf-viz@${VIZ_VERSION}` });
   assert.equal(plan.target.name, "okf-viz");
   assert.equal(plan.target.version, VIZ_VERSION);
-  assert.equal(plan.expectedTag, `okf-viz@${VIZ_VERSION}`);
+  assert.equal(plan.expectedTag, `v-okf-viz@${VIZ_VERSION}`);
   assert.equal(plan.distTag, parseVersion(VIZ_VERSION).prerelease ? "next" : "latest");
   assert.equal(plan.packageManager, "pnpm@10.28.2");
 });
 
-test("a scoped package keeps its leading @ in the tag and loses it in the filename", async () => {
-  const tag = `@disusered/okf-cli@${CLI_VERSION}`;
+test("no tag carries a slash, whatever the package is called", async () => {
+  const tag = `v-disusered-okf-cli@${CLI_VERSION}`;
   const plan = await loadReleasePlan({ tag });
   assert.equal(plan.target.name, "@disusered/okf-cli");
   assert.equal(plan.target.filename, `disusered-okf-cli-${CLI_VERSION}.tgz`);
   assert.deepEqual(parseReleaseTag(tag), {
-    name: "@disusered/okf-cli",
+    stem: "disusered-okf-cli",
     version: CLI_VERSION,
   });
   assert.equal(releaseTag("@disusered/okf-cli", CLI_VERSION), tag);
   assert.equal(packFilename("okf-viz", "2.0.0"), "okf-viz-2.0.0.tgz");
+  assert.equal(packageStem("@disusered/okf-cli"), "disusered-okf-cli");
+
+  // The whole point of the format: a deployment rule's * does not cross a slash, so a tag
+  // that carries one needs its own rule and a release fails after its build has passed.
+  for (const { name, version } of (await loadReleasePlan()).packages) {
+    const each = releaseTag(name, version);
+    assert.ok(each.startsWith("v"), `${each} must lead with v`);
+    assert.doesNotMatch(each, /\//, `${each} must carry no slash`);
+  }
 });
 
 test("package versions are independent of one another", async () => {
@@ -84,22 +94,22 @@ test("package versions are independent of one another", async () => {
 test("release tags are rejected when malformed or wrong", async () => {
   await assert.rejects(
     loadReleasePlan({ tag: `v${VIZ_VERSION}` }),
-    /release tag must be <name>@<version>/,
+    /release tag must be v-<package>@<version>/,
   );
   await assert.rejects(
-    loadReleasePlan({ tag: "okf-viz" }),
-    /release tag must be <name>@<version>/,
+    loadReleasePlan({ tag: "okf-viz@1.0.0" }),
+    /release tag must be v-<package>@<version>/,
   );
   await assert.rejects(
-    loadReleasePlan({ tag: "not-a-package@1.0.0" }),
+    loadReleasePlan({ tag: "v-not-a-package@1.0.0" }),
     /release tag names an unknown package: not-a-package/,
   );
   await assert.rejects(
-    loadReleasePlan({ tag: "okf-viz@0.0.0-not-the-version" }),
-    new RegExp(`release tag must be okf-viz@${VIZ_VERSION.replace(/[.\-+]/g, "\\$&")}`),
+    loadReleasePlan({ tag: "v-okf-viz@0.0.0-not-the-version" }),
+    new RegExp(`release tag must be v-okf-viz@${VIZ_VERSION.replace(/[.\-+]/g, "\\$&")}`),
   );
-  assert.equal(parseReleaseTag("okf-viz"), null);
-  assert.equal(parseReleaseTag("@scope/name"), null);
+  assert.equal(parseReleaseTag("okf-viz@1.0.0"), null);
+  assert.equal(parseReleaseTag("v-okf-viz"), null);
 });
 
 test("version parsing follows SemVer prerelease rules", () => {

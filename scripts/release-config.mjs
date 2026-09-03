@@ -29,24 +29,38 @@ export function packFilename(name, version) {
   return `${stem}-${version}.tgz`;
 }
 
-/** The git tag that releases one package. Scoped names keep their leading `@`. */
-export function releaseTag(name, version) {
-  return `${name}@${version}`;
+/** A package name flattened to one path-safe segment: `@disusered/okf-cli` → `disusered-okf-cli`. */
+export function packageStem(name) {
+  return name.startsWith("@") ? name.slice(1).replaceAll("/", "-") : name;
 }
 
 /**
- * Split `<name>@<version>` without tripping over a scoped name's own `@`.
+ * The git tag that releases one package.
  *
- * Returns null rather than throwing so a caller can report the tag it was given.
+ * It leads with `v` and carries no slash, for both packages and scopes, so one deployment rule
+ * on the release environment covers every package there is and every package there will be.
+ * Tags and environment rules living in different places is what made a release fail after its
+ * build had already passed; a format that needs no rule cannot fail that way again.
+ */
+export function releaseTag(name, version) {
+  return `v-${packageStem(name)}@${version}`;
+}
+
+/**
+ * Split `v-<stem>@<version>`.
+ *
+ * Returns null rather than throwing so a caller can report the tag it was given. The stem is
+ * matched back to a package name by `loadReleasePlan`, since only it knows the package set.
  */
 export function parseReleaseTag(tag) {
-  if (typeof tag !== "string") return null;
-  const separator = tag.lastIndexOf("@");
+  if (typeof tag !== "string" || !tag.startsWith("v-")) return null;
+  const rest = tag.slice(2);
+  const separator = rest.lastIndexOf("@");
   if (separator <= 0) return null;
-  const name = tag.slice(0, separator);
-  const version = tag.slice(separator + 1);
-  if (name === "" || version === "") return null;
-  return { name, version };
+  const stem = rest.slice(0, separator);
+  const version = rest.slice(separator + 1);
+  if (stem === "" || version === "") return null;
+  return { stem, version };
 }
 
 const semverPattern =
@@ -208,11 +222,11 @@ export async function loadReleasePlan({ tag } = {}) {
 
   const parsedTag = parseReleaseTag(tag);
   if (parsedTag === null) {
-    throw new Error(`release tag must be <name>@<version>, received ${String(tag)}`);
+    throw new Error(`release tag must be v-<package>@<version>, received ${String(tag)}`);
   }
-  const target = published.find(({ name }) => name === parsedTag.name);
+  const target = published.find(({ name }) => packageStem(name) === parsedTag.stem);
   if (target === undefined) {
-    throw new Error(`release tag names an unknown package: ${parsedTag.name}`);
+    throw new Error(`release tag names an unknown package: ${parsedTag.stem}`);
   }
   if (target.version !== parsedTag.version) {
     throw new Error(
