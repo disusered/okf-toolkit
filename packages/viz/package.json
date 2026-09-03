@@ -44,7 +44,7 @@
     "cytoscape": "^3.34.1"
   },
   "devDependencies": {
-    "@types/cytoscape": "3.21.9",
+    "@types/cytoscape": "3.31.0",
     "cytoscape": "3.34.1"
   },
   "license": "Apache-2.0",
