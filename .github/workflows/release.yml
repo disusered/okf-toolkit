@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      # One release publishes one package. The tag names it: `okf-viz@2.0.0`, or
+      # `@disusered/okf-cli@1.2.0` for a scoped name. Package versions are independent, so
+      # there is no workspace-wide version and nothing here may assume a package count.
       RELEASE_DIRECTORY: /tmp/okf-release
       RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
@@ -56,14 +59,16 @@ jobs:
           ' <<<"$tag_object"
           git merge-base --is-ancestor "$commit_sha" origin/main
 
-      - name: Pack and verify release artifacts
+      - name: Pack and verify the release artifact
         run: |
-          pnpm pack:release -- "$RELEASE_DIRECTORY"
+          pnpm pack:release -- --tag "$RELEASE_TAG" "$RELEASE_DIRECTORY"
           (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
           jq -e --arg tag "$RELEASE_TAG" '
             .schema == "okf.release.v1" and
             .tag == $tag and
-            (.packages | length) == 7
+            (.package.name | type) == "string" and
+            (.package.version | type) == "string" and
+            (.package.filename | type) == "string"
           ' "$RELEASE_DIRECTORY/RELEASE.json"
           node scripts/verify-release-artifacts.mjs \
             --tag "$RELEASE_TAG" \
@@ -72,9 +77,11 @@ jobs:
             --tag "$RELEASE_TAG" \
             --directory "$RELEASE_DIRECTORY"
 
+      # A fixed artifact name: artifacts are scoped to one workflow run, and a scoped package
+      # tag carries a slash, which an artifact name may not.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: okf-toolkit-${{ github.event.release.tag_name }}
+          name: okf-release
           path: ${{ env.RELEASE_DIRECTORY }}
           if-no-files-found: error
           retention-days: 7
@@ -98,7 +105,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: okf-toolkit-${{ github.event.release.tag_name }}
+          name: okf-release
           path: ${{ env.RELEASE_DIRECTORY }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -109,12 +116,25 @@ jobs:
 
       - name: Verify release artifacts and npm
         run: |
+          set -euo pipefail
           (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
           jq -e --arg tag "$RELEASE_TAG" '
             .schema == "okf.release.v1" and
             .tag == $tag and
-            (.packages | length) == 7
+            (.package.name | type) == "string"
           ' "$RELEASE_DIRECTORY/RELEASE.json"
+
+          # Read identity from the manifest the build produced, not by splitting the tag: a
+          # scoped name carries its own @ and would split wrong.
+          {
+            printf 'PACKAGE_NAME=%s\n' \
+              "$(jq -er '.package.name' "$RELEASE_DIRECTORY/RELEASE.json")"
+            printf 'PACKAGE_VERSION=%s\n' \
+              "$(jq -er '.package.version' "$RELEASE_DIRECTORY/RELEASE.json")"
+            printf 'PACKAGE_FILENAME=%s\n' \
+              "$(jq -er '.package.filename' "$RELEASE_DIRECTORY/RELEASE.json")"
+          } >>"$GITHUB_ENV"
+
           npm_version="$(npm --version)"
           npm_major="${npm_version%%.*}"
           npm_remainder="${npm_version#*.}"
@@ -132,12 +152,9 @@ jobs:
           # The single quotes keep JavaScript template expressions out of the shell.
           # shellcheck disable=SC2016
           node --input-type=module --eval '
-            const names = [
-              "okf-contracts", "okf-core", "okf-viz", "okf-node",
-              "okf-signatures", "okf-cloudflare", "@disusered/okf-cli",
-            ];
-            const candidate = process.argv[1];
-            const tag = process.argv[2];
+            const name = process.argv[1];
+            const candidate = process.argv[2];
+            const tag = process.argv[3];
             const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
             const parse = (value) => {
               const match = pattern.exec(value);
@@ -147,7 +164,7 @@ jobs:
                 prerelease: match[4]?.split(".") ?? [],
               };
             };
-            const packageMetadata = async (name) => {
+            const packageMetadata = async (packageName) => {
               const delays = [0, 1000, 2000, 4000];
               let lastError;
               for (const delay of delays) {
@@ -156,7 +173,9 @@ jobs:
                 }
                 let response;
                 try {
-                  response = await fetch(`https://registry.npmjs.org/${name}`);
+                  response = await fetch(
+                    `https://registry.npmjs.org/${packageName.replace("/", "%2f")}`,
+                  );
                 } catch (error) {
                   lastError = error;
                   continue;
@@ -164,11 +183,11 @@ jobs:
                 if (response.status === 404) return null;
                 if (response.ok) return await response.json();
                 if (response.status !== 429 && response.status < 500) {
-                  throw new Error(`${name}: HTTP ${response.status}`);
+                  throw new Error(`${packageName}: HTTP ${response.status}`);
                 }
-                lastError = new Error(`${name}: HTTP ${response.status}`);
+                lastError = new Error(`${packageName}: HTTP ${response.status}`);
               }
-              throw lastError ?? new Error(`${name}: registry lookup failed`);
+              throw lastError ?? new Error(`${packageName}: registry lookup failed`);
             };
             const compare = (left, right) => {
               const a = parse(left);
@@ -198,18 +217,18 @@ jobs:
               }
               return 0;
             };
-            for (const name of names) {
-              const metadata = await packageMetadata(name);
-              if (metadata === null) continue;
+            const metadata = await packageMetadata(name);
+            if (metadata !== null) {
               const current = metadata["dist-tags"]?.[tag];
-              if (current === undefined || current === candidate) continue;
-              if (compare(candidate, current) <= 0) {
-                throw new Error(`${name}: ${tag} already points to ${current}`);
+              if (current !== undefined && current !== candidate) {
+                if (compare(candidate, current) <= 0) {
+                  throw new Error(`${name}: ${tag} already points to ${current}`);
+                }
               }
             }
-          ' "${RELEASE_TAG#v}" "$DIST_TAG"
+          ' "$PACKAGE_NAME" "$PACKAGE_VERSION" "$DIST_TAG"
 
-      - name: Publish exact release artifacts
+      - name: Publish the exact release artifact
         env:
           EXPECTED_COMMIT: ${{ github.sha }}
         run: |
@@ -252,7 +271,7 @@ jobs:
               if status="$(curl --silent --show-error \
                 --output "$metadata" \
                 --write-out '%{http_code}' \
-                "https://registry.npmjs.org/$name")"; then
+                "https://registry.npmjs.org/${name/\//%2f}")"; then
                 case "$status" in
                   200) jq -r --arg tag "$dist_tag" \
                          '."dist-tags"[$tag] // "MISSING"' "$metadata"; return ;;
@@ -324,82 +343,70 @@ jobs:
             return 1
           }
 
-          version="${RELEASE_TAG#v}"
-          packages=(
-            okf-contracts
-            okf-core
-            okf-viz
-            okf-node
-            okf-signatures
-            okf-cloudflare
-            "@disusered/okf-cli"
-          )
-          for name in "${packages[@]}"; do
-            filename="${name#@}"
-            filename="${filename//\//-}-$version.tgz"
-            tarball="$RELEASE_DIRECTORY/$filename"
-            awk -v filename="$filename" '$2 == filename { found = 1 } END { exit !found }' \
-              "$RELEASE_DIRECTORY/SHA256SUMS"
-            packed_manifest="$(tar -xOf "$tarball" package/package.json)"
-            jq -e \
-              --arg name "$name" \
-              --arg repository "git+https://github.com/disusered/okf-toolkit.git" \
-              --arg version "$version" '
-                .name == $name and
-                .version == $version and
-                .publishConfig.access == "public" and
-                .repository.url == $repository and
-                ([.. | strings | select(startswith("workspace:"))] | length) == 0
-              ' <<<"$packed_manifest"
-            expected="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
-            expected_sha512="$(sha512sum "$tarball" | cut -d' ' -f1)"
+          name="$PACKAGE_NAME"
+          version="$PACKAGE_VERSION"
+          tarball="$RELEASE_DIRECTORY/$PACKAGE_FILENAME"
+          awk -v filename="$PACKAGE_FILENAME" '$2 == filename { found = 1 } END { exit !found }' \
+            "$RELEASE_DIRECTORY/SHA256SUMS"
+          packed_manifest="$(tar -xOf "$tarball" package/package.json)"
+          jq -e \
+            --arg name "$name" \
+            --arg repository "git+https://github.com/disusered/okf-toolkit.git" \
+            --arg version "$version" '
+              .name == $name and
+              .version == $version and
+              .publishConfig.access == "public" and
+              .repository.url == $repository and
+              ([.. | strings | select(startswith("workspace:"))] | length) == 0
+            ' <<<"$packed_manifest"
+          expected="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
+          expected_sha512="$(sha512sum "$tarball" | cut -d' ' -f1)"
 
+          current="$(registry_integrity "$name" "$version")"
+          current_tag="$(registry_dist_tag "$name" "$DIST_TAG")"
+          if [[ "$current" == "$expected" && "$current_tag" == "$version" ]]; then
+            printf '%s@%s and %s already match; skipping\n' \
+              "$name" "$version" "$DIST_TAG"
+            verify_provenance "$name" "$version" "$expected_sha512"
+            exit 0
+          fi
+          if [[ "$current" != MISSING && "$current" != "$expected" ]]; then
+            printf 'Registry integrity mismatch for %s@%s\n' "$name" "$version" >&2
+            exit 1
+          fi
+
+          if [[ "$current" == MISSING && "$current_tag" != "$version" ]]; then
+            npm publish "$tarball" \
+              --access public \
+              --ignore-scripts \
+              --provenance \
+              --tag "$DIST_TAG"
+          else
+            printf 'npm is still processing %s@%s; waiting for registry visibility\n' \
+              "$name" "$version"
+          fi
+
+          matched=false
+          for delay in "${registry_visibility_delays[@]}"; do
+            if (( delay > 0 )); then sleep "$delay"; fi
             current="$(registry_integrity "$name" "$version")"
             current_tag="$(registry_dist_tag "$name" "$DIST_TAG")"
             if [[ "$current" == "$expected" && "$current_tag" == "$version" ]]; then
-              printf '%s@%s and %s already match; skipping\n' \
-                "$name" "$version" "$DIST_TAG"
-              verify_provenance "$name" "$version" "$expected_sha512"
-              continue
+              matched=true
+              break
             fi
             if [[ "$current" != MISSING && "$current" != "$expected" ]]; then
-              printf 'Registry integrity mismatch for %s@%s\n' "$name" "$version" >&2
-              exit 1
-            fi
-
-            if [[ "$current" == MISSING && "$current_tag" != "$version" ]]; then
-              npm publish "$tarball" \
-                --access public \
-                --ignore-scripts \
-                --provenance \
-                --tag "$DIST_TAG"
-            else
-              printf 'npm is still processing %s@%s; waiting for registry visibility\n' \
-                "$name" "$version"
-            fi
-
-            matched=false
-            for delay in "${registry_visibility_delays[@]}"; do
-              if (( delay > 0 )); then sleep "$delay"; fi
-              current="$(registry_integrity "$name" "$version")"
-              current_tag="$(registry_dist_tag "$name" "$DIST_TAG")"
-              if [[ "$current" == "$expected" && "$current_tag" == "$version" ]]; then
-                matched=true
-                break
-              fi
-              if [[ "$current" != MISSING && "$current" != "$expected" ]]; then
-                printf 'Published integrity mismatch for %s@%s\n' \
-                  "$name" "$version" >&2
-                exit 1
-              fi
-            done
-            if [[ "$matched" != true ]]; then
-              printf 'npm did not return %s@%s after publication\n' \
+              printf 'Published integrity mismatch for %s@%s\n' \
                 "$name" "$version" >&2
               exit 1
             fi
-            verify_provenance "$name" "$version" "$expected_sha512"
           done
+          if [[ "$matched" != true ]]; then
+            printf 'npm did not return %s@%s after publication\n' \
+              "$name" "$version" >&2
+            exit 1
+          fi
+          verify_provenance "$name" "$version" "$expected_sha512"
 
   release-assets:
     needs: [build, publish]
@@ -414,7 +421,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: okf-toolkit-${{ github.event.release.tag_name }}
+          name: okf-release
           path: ${{ env.RELEASE_DIRECTORY }}
 
       - name: Upload matching release assets
@@ -425,18 +432,9 @@ jobs:
           (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
           release="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")"
 
-          version="${RELEASE_TAG#v}"
-          assets=(
-            "okf-contracts-$version.tgz"
-            "okf-core-$version.tgz"
-            "okf-viz-$version.tgz"
-            "okf-node-$version.tgz"
-            "okf-signatures-$version.tgz"
-            "okf-cloudflare-$version.tgz"
-            "disusered-okf-cli-$version.tgz"
-            SHA256SUMS
-            RELEASE.json
-          )
+          PACKAGE_FILENAME="$(jq -er '.package.filename' \
+            "$RELEASE_DIRECTORY/RELEASE.json")"
+          assets=("$PACKAGE_FILENAME" SHA256SUMS RELEASE.json)
           for name in "${assets[@]}"; do
             asset="$RELEASE_DIRECTORY/$name"
             [[ -f "$asset" ]]

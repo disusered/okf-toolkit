@@ -4,6 +4,14 @@ import { fileURLToPath } from "node:url";
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const repositoryUrl = "git+https://github.com/disusered/okf-toolkit.git";
+
+/**
+ * Every public package, in dependency order.
+ *
+ * The order is an invariant of the repository rather than a release schedule: a package may
+ * only depend on one that appears before it. Releases are per package, so this list no longer
+ * describes what a single release publishes.
+ */
 export const releasePackages = [
   { directory: "contracts", name: "okf-contracts" },
   { directory: "core", name: "okf-core" },
@@ -19,6 +27,26 @@ export function packFilename(name, version) {
     ? name.slice(1).replaceAll("/", "-")
     : name;
   return `${stem}-${version}.tgz`;
+}
+
+/** The git tag that releases one package. Scoped names keep their leading `@`. */
+export function releaseTag(name, version) {
+  return `${name}@${version}`;
+}
+
+/**
+ * Split `<name>@<version>` without tripping over a scoped name's own `@`.
+ *
+ * Returns null rather than throwing so a caller can report the tag it was given.
+ */
+export function parseReleaseTag(tag) {
+  if (typeof tag !== "string") return null;
+  const separator = tag.lastIndexOf("@");
+  if (separator <= 0) return null;
+  const name = tag.slice(0, separator);
+  const version = tag.slice(separator + 1);
+  if (name === "" || version === "") return null;
+  return { name, version };
 }
 
 const semverPattern =
@@ -52,10 +80,16 @@ function packageRepositoryUrl(manifest) {
     : manifest.repository?.url;
 }
 
+/**
+ * Validate every public package, and resolve the one a tag names.
+ *
+ * Without a tag this checks the whole workspace and returns no target, which is what
+ * `pnpm release:verify` runs. With a tag it additionally resolves that package, and the caller
+ * releases only it. Package versions are independent: nothing here requires two packages to
+ * carry the same version, and the workspace root's version is not a release version at all.
+ */
 export async function loadReleasePlan({ tag } = {}) {
   const rootManifest = await readManifest(join(root, "package.json"));
-  const parsedVersion = parseVersion(rootManifest.version);
-  const version = parsedVersion.value;
   if (rootManifest.private !== true) {
     throw new Error("workspace root must remain private");
   }
@@ -64,11 +98,6 @@ export async function loadReleasePlan({ tag } = {}) {
   }
   if (!/^pnpm@[0-9]+\.[0-9]+\.[0-9]+$/.test(rootManifest.packageManager ?? "")) {
     throw new Error("workspace must pin an exact pnpm package manager version");
-  }
-
-  const expectedTag = `v${version}`;
-  if (tag !== undefined && tag !== expectedTag) {
-    throw new Error(`release tag must be ${expectedTag}, received ${tag}`);
   }
 
   const packageDirectories = await readdir(join(root, "packages"), {
@@ -113,11 +142,7 @@ export async function loadReleasePlan({ tag } = {}) {
         `${manifestPath} must declare package name ${releasePackage.name}`,
       );
     }
-    if (manifest.version !== version) {
-      throw new Error(
-        `${releasePackage.name} version ${String(manifest.version)} does not match ${version}`,
-      );
-    }
+    const parsedVersion = parseVersion(manifest.version);
     if (manifest.private === true) {
       throw new Error(`${releasePackage.name} must be public`);
     }
@@ -146,7 +171,9 @@ export async function loadReleasePlan({ tag } = {}) {
       dependencies: Object.keys(manifest.dependencies ?? {}).filter((name) =>
         name.startsWith("okf-"),
       ),
-      filename: packFilename(releasePackage.name, version),
+      filename: packFilename(releasePackage.name, parsedVersion.value),
+      prerelease: parsedVersion.prerelease,
+      version: parsedVersion.value,
     });
   }
 
@@ -169,14 +196,36 @@ export async function loadReleasePlan({ tag } = {}) {
     }
   }
 
+  /** What `pnpm pack` will write in place of each `workspace:*` range. */
+  const workspaceVersions = Object.fromEntries(
+    packages.map(({ name, version }) => [name, version]),
+  );
+  const published = packages.map(({ dependencies: _, ...releasePackage }) => releasePackage);
+
+  if (tag === undefined) {
+    return { packages: published, target: null, workspaceVersions };
+  }
+
+  const parsedTag = parseReleaseTag(tag);
+  if (parsedTag === null) {
+    throw new Error(`release tag must be <name>@<version>, received ${String(tag)}`);
+  }
+  const target = published.find(({ name }) => name === parsedTag.name);
+  if (target === undefined) {
+    throw new Error(`release tag names an unknown package: ${parsedTag.name}`);
+  }
+  if (target.version !== parsedTag.version) {
+    throw new Error(
+      `release tag must be ${releaseTag(target.name, target.version)}, received ${tag}`,
+    );
+  }
+
   return {
-    distTag: parsedVersion.prerelease ? "next" : "latest",
-    expectedTag,
+    distTag: target.prerelease ? "next" : "latest",
+    expectedTag: releaseTag(target.name, target.version),
     packageManager: rootManifest.packageManager,
-    packages: packages.map(({ dependencies: _, ...releasePackage }) =>
-      releasePackage
-    ),
-    prerelease: parsedVersion.prerelease,
-    version,
+    packages: published,
+    target,
+    workspaceVersions,
   };
 }

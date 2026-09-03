@@ -37,9 +37,21 @@ function hasExport(entries, path) {
   return [...entries].some((entry) => expression.test(entry));
 }
 
+/** Files a specific package must carry, checked on top of the rules every package obeys. */
+const REQUIRED_PATHS = {
+  "okf-contracts": [
+    "package/NOTICE",
+    "package/schemas/okf.inspect.v1.schema.json",
+    "package/schemas/okf.operations.v1.schema.json",
+    "package/spec/SPEC.md",
+  ],
+  "okf-viz": ["package/THIRD_PARTY_NOTICES.md"],
+};
+
 const tag = argumentValue("--tag");
 const directory = resolve(root, argumentValue("--directory"));
 const plan = await loadReleasePlan({ tag });
+const target = plan.target;
 const releaseManifest = JSON.parse(
   await readFile(join(directory, "RELEASE.json"), "utf8"),
 );
@@ -47,19 +59,12 @@ const releaseManifest = JSON.parse(
 if (
   releaseManifest.schema !== "okf.release.v1" ||
   releaseManifest.tag !== plan.expectedTag ||
-  releaseManifest.version !== plan.version ||
   releaseManifest.dist_tag !== plan.distTag ||
-  releaseManifest.prerelease !== plan.prerelease ||
-  !Array.isArray(releaseManifest.packages) ||
-  releaseManifest.packages.length !== plan.packages.length
+  releaseManifest.prerelease !== target.prerelease ||
+  releaseManifest.package?.name !== target.name ||
+  releaseManifest.package?.version !== target.version
 ) {
   throw new Error("RELEASE.json does not match the release plan");
-}
-if (
-  JSON.stringify(releaseManifest.packages.map(({ name }) => name)) !==
-  JSON.stringify(plan.packages.map(({ name }) => name))
-) {
-  throw new Error("RELEASE.json package order does not match the release plan");
 }
 
 const forbidden = [
@@ -67,111 +72,91 @@ const forbidden = [
   /^package\/(?:.*\/)?\.env(?:\.|$)/,
 ];
 
-for (const releasePackage of plan.packages) {
-  const artifact = releaseManifest.packages.find(
-    ({ name }) => name === releasePackage.name,
-  );
-  if (artifact?.filename !== releasePackage.filename) {
-    throw new Error(`RELEASE.json is missing ${releasePackage.name}`);
-  }
+const artifact = releaseManifest.package;
+if (artifact.filename !== target.filename) {
+  throw new Error(`RELEASE.json is missing ${target.name}`);
+}
 
-  const tarball = join(directory, releasePackage.filename);
-  const bytes = await readFile(tarball);
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
-  if (artifact.sha256 !== sha256 || artifact.integrity !== integrity) {
-    throw new Error(`RELEASE.json digest mismatch for ${releasePackage.filename}`);
-  }
+const tarball = join(directory, target.filename);
+const bytes = await readFile(tarball);
+const sha256 = createHash("sha256").update(bytes).digest("hex");
+const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
+if (artifact.sha256 !== sha256 || artifact.integrity !== integrity) {
+  throw new Error(`RELEASE.json digest mismatch for ${target.filename}`);
+}
 
-  const entries = tar(["-tf", tarball]).trimEnd().split("\n");
-  const verboseEntries = tar(["-tvf", tarball]).trimEnd().split("\n");
-  if (verboseEntries.length !== entries.length) {
-    throw new Error(`${releasePackage.filename} has an unreadable archive listing`);
-  }
-  for (const [index, entry] of entries.entries()) {
-    const segments = entry.split("/");
-    if (
-      !entry.startsWith("package/") ||
-      entry.includes("\\") ||
-      segments.some((segment) => segment === "" || segment === "." || segment === "..")
-    ) {
-      throw new Error(`${releasePackage.filename} has unsafe archive path ${entry}`);
-    }
-    if (verboseEntries[index]?.[0] !== "-") {
-      throw new Error(`${releasePackage.filename} has non-file archive entry ${entry}`);
-    }
-  }
-  const entrySet = new Set(entries);
-  for (const required of ["package/package.json", "package/README.md", "package/LICENSE"]) {
-    if (!entrySet.has(required)) {
-      throw new Error(`${releasePackage.filename} is missing ${required}`);
-    }
-  }
-  for (const entry of entries) {
-    if (forbidden.some((pattern) => pattern.test(entry))) {
-      throw new Error(`${releasePackage.filename} contains forbidden path ${entry}`);
-    }
-  }
-
-  const packedManifest = JSON.parse(
-    tar(["-xOf", tarball, "package/package.json"]),
-  );
+const entries = tar(["-tf", tarball]).trimEnd().split("\n");
+const verboseEntries = tar(["-tvf", tarball]).trimEnd().split("\n");
+if (verboseEntries.length !== entries.length) {
+  throw new Error(`${target.filename} has an unreadable archive listing`);
+}
+for (const [index, entry] of entries.entries()) {
+  const segments = entry.split("/");
   if (
-    packedManifest.name !== releasePackage.name ||
-    packedManifest.version !== plan.version
+    !entry.startsWith("package/") ||
+    entry.includes("\\") ||
+    segments.some((segment) => segment === "" || segment === "." || segment === "..")
   ) {
-    throw new Error(`${releasePackage.filename} has incorrect package identity`);
+    throw new Error(`${target.filename} has unsafe archive path ${entry}`);
   }
-  if (JSON.stringify(packedManifest).includes("workspace:")) {
-    throw new Error(`${releasePackage.filename} contains a workspace dependency`);
-  }
-  for (const [dependency, range] of Object.entries(packedManifest.dependencies ?? {})) {
-    if (dependency.startsWith("okf-") && range !== plan.version) {
-      throw new Error(
-        `${releasePackage.filename} must pin ${dependency} to ${plan.version}`,
-      );
-    }
-  }
-  for (const path of exportedPaths(packedManifest.exports)) {
-    if (!hasExport(entrySet, path)) {
-      throw new Error(`${releasePackage.filename} is missing export ${path}`);
-    }
-  }
-
-  for (const path of Object.values(packedManifest.bin ?? {})) {
-    const entry = `package/${path.replace(/^\.\//, "")}`;
-    if (!entrySet.has(entry)) {
-      throw new Error(`${releasePackage.filename} is missing binary ${path}`);
-    }
-    const mode = tar(["-tvf", tarball, entry]).slice(0, 10);
-    if (mode[0] !== "-" || mode[3] !== "x") {
-      throw new Error(`${releasePackage.filename} binary is not executable: ${path}`);
-    }
+  if (verboseEntries[index]?.[0] !== "-") {
+    throw new Error(`${target.filename} has non-file archive entry ${entry}`);
   }
 }
-
-const contracts = new Set(
-  tar([
-    "-tf",
-    join(directory, `okf-contracts-${plan.version}.tgz`),
-  ]).trimEnd().split("\n"),
-);
-for (const path of [
-  "package/NOTICE",
-  "package/schemas/okf.inspect.v1.schema.json",
-  "package/schemas/okf.operations.v1.schema.json",
-  "package/spec/SPEC.md",
+const entrySet = new Set(entries);
+for (const required of [
+  "package/package.json",
+  "package/README.md",
+  "package/LICENSE",
+  ...(REQUIRED_PATHS[target.name] ?? []),
 ]) {
-  if (!contracts.has(path)) throw new Error(`okf-contracts is missing ${path}`);
+  if (!entrySet.has(required)) {
+    throw new Error(`${target.filename} is missing ${required}`);
+  }
+}
+for (const entry of entries) {
+  if (forbidden.some((pattern) => pattern.test(entry))) {
+    throw new Error(`${target.filename} contains forbidden path ${entry}`);
+  }
 }
 
-const visualization = new Set(
-  tar(["-tf", join(directory, `okf-viz-${plan.version}.tgz`)])
-    .trimEnd()
-    .split("\n"),
-);
-if (!visualization.has("package/THIRD_PARTY_NOTICES.md")) {
-  throw new Error("okf-viz is missing THIRD_PARTY_NOTICES.md");
+const packedManifest = JSON.parse(tar(["-xOf", tarball, "package/package.json"]));
+if (
+  packedManifest.name !== target.name ||
+  packedManifest.version !== target.version
+) {
+  throw new Error(`${target.filename} has incorrect package identity`);
+}
+if (JSON.stringify(packedManifest).includes("workspace:")) {
+  throw new Error(`${target.filename} contains a workspace dependency`);
+}
+// Versions are independent, so a `workspace:*` range resolves to whatever that dependency
+// currently carries in this workspace, not to this package's own version.
+for (const [dependency, range] of Object.entries(packedManifest.dependencies ?? {})) {
+  if (!dependency.startsWith("okf-")) continue;
+  const expected = plan.workspaceVersions[dependency];
+  if (expected === undefined) {
+    throw new Error(`${target.filename} depends on unconfigured package ${dependency}`);
+  }
+  if (range !== expected) {
+    throw new Error(`${target.filename} must pin ${dependency} to ${expected}`);
+  }
+}
+for (const path of exportedPaths(packedManifest.exports)) {
+  if (!hasExport(entrySet, path)) {
+    throw new Error(`${target.filename} is missing export ${path}`);
+  }
 }
 
-console.log(`Verified ${plan.packages.length} release tarballs for ${plan.expectedTag}`);
+for (const path of Object.values(packedManifest.bin ?? {})) {
+  const entry = `package/${path.replace(/^\.\//, "")}`;
+  if (!entrySet.has(entry)) {
+    throw new Error(`${target.filename} is missing binary ${path}`);
+  }
+  const mode = tar(["-tvf", tarball, entry]).slice(0, 10);
+  if (mode[0] !== "-" || mode[3] !== "x") {
+    throw new Error(`${target.filename} binary is not executable: ${path}`);
+  }
+}
+
+console.log(`Verified ${target.filename} for ${plan.expectedTag}`);

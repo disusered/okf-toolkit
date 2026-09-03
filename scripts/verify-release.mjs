@@ -1,39 +1,61 @@
 import { loadReleasePlan } from "./release-config.mjs";
 
-const arguments_ = process.argv.slice(2);
-const tagIndex = arguments_.indexOf("--tag");
-if (tagIndex !== -1 && tagIndex === arguments_.length - 1) {
-  throw new Error("--tag requires a value");
-}
-const tag = tagIndex === -1 ? undefined : arguments_[tagIndex + 1];
-const prereleaseIndex = arguments_.indexOf("--prerelease");
-if (prereleaseIndex !== -1 && prereleaseIndex === arguments_.length - 1) {
-  throw new Error("--prerelease requires true or false");
-}
-const plan = await loadReleasePlan({ tag });
-if (prereleaseIndex !== -1) {
-  const value = arguments_[prereleaseIndex + 1];
-  if (value !== "true" && value !== "false") {
-    throw new Error("--prerelease requires true or false");
+function optionValue(name) {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+  if (index === process.argv.length - 1) {
+    throw new Error(`${name} requires a value`);
   }
-  if ((value === "true") !== plan.prerelease) {
-    throw new Error(
-      `GitHub prerelease state must be ${String(plan.prerelease)} for ${plan.version}`,
-    );
-  }
+  return process.argv[index + 1];
 }
 
-console.log(
-  JSON.stringify(
-    {
-      dist_tag: plan.distTag,
-      packages: plan.packages.map(({ filename, name }) => ({ filename, name })),
-      prerelease: plan.prerelease,
-      schema: "okf.release-plan.v1",
-      tag: plan.expectedTag,
-      version: plan.version,
-    },
-    null,
-    2,
-  ),
-);
+const tag = optionValue("--tag");
+const prerelease = optionValue("--prerelease");
+const plan = await loadReleasePlan({ tag });
+
+// Without a tag this is the workspace-wide check `pnpm check` runs: every public package is
+// valid and the dependency order holds. There is no single version to report, because versions
+// are independent.
+if (plan.target === null) {
+  if (prerelease !== undefined) {
+    throw new Error("--prerelease requires --tag");
+  }
+  console.log(
+    JSON.stringify(
+      {
+        packages: plan.packages.map(({ name, version }) => ({ name, version })),
+        schema: "okf.release-plan.v1",
+      },
+      null,
+      2,
+    ),
+  );
+} else {
+  if (prerelease !== undefined) {
+    if (prerelease !== "true" && prerelease !== "false") {
+      throw new Error("--prerelease requires true or false");
+    }
+    if ((prerelease === "true") !== plan.target.prerelease) {
+      throw new Error(
+        `GitHub prerelease state must be ${String(plan.target.prerelease)} for ${plan.expectedTag}`,
+      );
+    }
+  }
+  console.log(
+    JSON.stringify(
+      {
+        dist_tag: plan.distTag,
+        package: {
+          filename: plan.target.filename,
+          name: plan.target.name,
+          version: plan.target.version,
+        },
+        prerelease: plan.target.prerelease,
+        schema: "okf.release-plan.v1",
+        tag: plan.expectedTag,
+      },
+      null,
+      2,
+    ),
+  );
+}
