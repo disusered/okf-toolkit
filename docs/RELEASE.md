@@ -5,7 +5,7 @@ tag and its matching GitHub release. Do not publish a toolkit release from a
 workstation. The name bootstrap described in this guide is not a release.
 
 The `.github/workflows/release.yml` workflow starts when you publish a GitHub
-release for an annotated, signed tag named `<name>@<version>` — `okf-viz@2.0.0`,
+release for an annotated, signed tag named `v-<package>@<version>` — `v-okf-viz@2.0.0`,
 or `@disusered/okf-cli@1.2.0` for the scoped name. The tag must point to the
 reviewed release commit, and `<version>` must match that package's manifest.
 
@@ -28,7 +28,7 @@ that all release checks pass:
 ```bash
 pnpm install --frozen-lockfile
 pnpm check
-node scripts/verify-release.mjs --tag okf-viz@2.0.0
+node scripts/verify-release.mjs --tag v-okf-viz@2.0.0
 ```
 
 Run without `--tag` to check every package and the dependency order instead of
@@ -37,46 +37,41 @@ one release.
 Create, verify, and push the signed tag:
 
 ```bash
-git tag -s okf-viz@2.0.0 -m "Release okf-viz@2.0.0"
-git verify-tag okf-viz@2.0.0
-git push origin okf-viz@2.0.0
+git tag -s v-okf-viz@2.0.0 -m "Release v-okf-viz@2.0.0"
+git verify-tag v-okf-viz@2.0.0
+git push origin v-okf-viz@2.0.0
 ```
 
 Do not move a release tag after you push it. Create the matching GitHub
 prerelease only after the tag is available on GitHub:
 
 ```bash
-gh release create okf-viz@2.0.0 \
+gh release create v-okf-viz@2.0.0 \
   --verify-tag \
-  --title okf-viz@2.0.0 \
+  --title v-okf-viz@2.0.0 \
   --generate-notes
 ```
 
-Add `--prerelease` for a SemVer prerelease such as `okf-viz@2.0.0-rc.1`.
+Add `--prerelease` for a SemVer prerelease such as `v-okf-viz@2.0.0-rc.1`.
 
 Publishing the GitHub release is the publication request.
 
-## Let the environment accept the tag
+## Why the tag looks the way it does
 
 The `npm-release` environment restricts which refs may deploy to it, and that rule
-lives in GitHub settings rather than in this repository. Nothing here can test it:
-`pnpm check` passes, the build job passes, the tarball is packed and verified, and
-the deploy is then rejected in about two seconds before a single step runs.
+lives in GitHub settings rather than in this repository. Nothing here can test it,
+which is how a release once failed after its build had already passed: `pnpm check`
+succeeded, the tarball was packed and verified, and the deploy was rejected two
+seconds later before a single step ran.
 
-Under **Settings → Environments → npm-release → Deployment branches and tags**, the
-allowed tag patterns must cover the release tag format. Two rules cover every
-package, present and future:
+So the tag is shaped to fit the rule that is already there. It leads with `v` and
+carries no slash — `@disusered/okf-cli` is flattened to `disusered-okf-cli`, the
+same stem its tarball uses — because a deployment pattern's `*` does not cross a
+`/`. One `v*` rule therefore covers every package now and every package later, and
+adding a package needs no settings change at all.
 
-```
-okf-*@*
-@disusered/okf-cli@*
-```
-
-Two rules are needed rather than one because a deployment pattern's `*` does not
-match `/`, and the CLI's name carries a scope. A `v*` rule from before per-package
-versioning is harmless to leave in place, and matches nothing that is released now.
-
-**Adding a package means adding its pattern**, unless its name starts with `okf-`.
+`scripts/test/release.test.mjs` asserts that property for every package in the
+workspace, so a future tag format cannot quietly reintroduce the coupling.
 
 ## GitHub Actions release
 
@@ -115,7 +110,7 @@ than a schedule: a package may only depend on one that appears before it, and
 6. `okf-cloudflare`
 7. `@disusered/okf-cli`
 
-A SemVer prerelease such as `okf-viz@2.0.0-rc.1` uses the npm `next`
+A SemVer prerelease such as `v-okf-viz@2.0.0-rc.1` uses the npm `next`
 distribution tag and requires a GitHub prerelease. A stable version uses
 `latest` and requires a standard GitHub release.
 
