@@ -28,8 +28,7 @@ jobs:
 
           # A release publishes one package, but CI packs every one of them: a change to the
           # release machinery must not pass by working for a single package.
-          mapfile -t tags < <(node scripts/verify-release.mjs |
-            jq -r '.packages[] | "\(.name)@\(.version)"')
+          mapfile -t tags < <(node scripts/verify-release.mjs | jq -r '.packages[].tag')
           test "${#tags[@]}" -gt 0
 
           for tag in "${tags[@]}"; do

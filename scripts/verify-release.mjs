@@ -1,4 +1,4 @@
-import { loadReleasePlan } from "./release-config.mjs";
+import { loadReleasePlan, releaseTag } from "./release-config.mjs";
 
 function optionValue(name) {
   const index = process.argv.indexOf(name);
@@ -23,7 +23,13 @@ if (plan.target === null) {
   console.log(
     JSON.stringify(
       {
-        packages: plan.packages.map(({ name, version }) => ({ name, version })),
+        // The tag is reported rather than left to the caller to build: a second place that
+        // knows the format is what made a release fail once already.
+        packages: plan.packages.map(({ name, version }) => ({
+          name,
+          tag: releaseTag(name, version),
+          version,
+        })),
         schema: "okf.release-plan.v1",
       },
       null,
