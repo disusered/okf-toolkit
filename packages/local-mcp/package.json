@@ -38,7 +38,7 @@
     "okf-contracts": "workspace:*",
     "okf-core": "workspace:*",
     "okf-node": "workspace:*",
-    "okf-viz": "workspace:*"
+    "okf-page": "workspace:*"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",

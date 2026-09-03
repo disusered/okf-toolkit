@@ -1,68 +1,51 @@
 # okf-viz
 
-`okf-viz` turns one canonical `okf.inspect.v1` bundle analysis into a
-deterministic, self-contained HTML reader and graph.
+`okf-viz` is the graph: the projection from a canonical `okf.inspect.v1` bundle
+analysis to graph data, and the browser rendering of that data.
 
-The generated page embeds pinned Cytoscape.js, Marked, and DOMPurify builds, so
-it makes no runtime network requests. [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
-records their licenses.
-
-The package does not read files, parse Markdown frontmatter, resolve links, or
-combine bundles. Call `okf-core` first, then pass its analysis to
-`generateVisualization`:
+It is a library, not a page. If you want a finished HTML file you can open
+without a network, use [`okf-page`](../page), which builds one around this
+graph.
 
 ```ts
 import { analyzeBundle } from "okf-core";
-import { generateVisualization } from "okf-viz";
+import { toVisualizationGraph } from "okf-viz";
 
-const analysis = analyzeBundle(source);
-const html = generateVisualization({ bundle: "handbook", analysis });
+const graph = toVisualizationGraph(analyzeBundle(source));
 ```
 
-The result contains Cytoscape, Marked, DOMPurify, styles, data, and behavior in
-one file. Its Content Security Policy allows no external origins and blocks
-network connections. Marked renders Markdown, and DOMPurify sanitizes the
-result before it reaches the document.
+`toVisualizationGraph` is pure. No clock, environment, storage, network,
+Markdown parsing, or link resolution enters it, so the same analysis always
+produces the same graph.
 
-The same bundle name and analysis produce the same bytes. No timestamp,
-hostname, storage location, or runtime configuration enters the generator.
+## What the graph encodes
 
-## Trust and freshness
+Four channels, each carrying one fact, so a reader can tell them apart:
 
-The visualizer projects the trust signals `okf-core` derives and never re-derives them. Each
-node carries `trustTier`, `stale`, `staleAfter`, `tags`, and `status`.
+- **Fill and shape** are the page's type.
+- **The border** is who wrote the page — solid for a person, dashed for an
+  agent, double for a process, absent when the actor grammar says nothing.
+- **Opacity** is whether a person ever checked the page.
+- **A dotted outline** marks a pending node: a link to a page nobody has
+  written yet, which is work in progress rather than an error.
 
-Those are read in the reader's metadata table, not from the graph. Encoding three trust tiers
-as border styles was tried and removed: distinguishing dotted from dashed on a small circle is
-not something a reader can do at a glance, so it needed a permanent key, and a key is a poor
-trade for a signal the table already states in words. The graph carries structure and type.
+## Rendering in a browser
 
-The reader always shows a Trust row, so an absent signal can never be read as verification.
-Filtering by trust, status or staleness is still available; a filter appears only when the
-bundle actually varies on that facet, and when it does not the header says so outright —
-`21 pages, 34 relationships, all unverified` — because a hidden filter must not let a reader
-infer a review nobody performed.
+`okf-viz/browser` mounts the graph into an element with Cytoscape and returns a
+handle for selecting, focusing, dimming and fitting it.
 
-A link whose target nobody has written becomes a pending placeholder node rather than being
-dropped, so the graph shows the work the bundle has given itself.
+```ts
+import { mountGraph } from "okf-viz/browser";
 
-## Determinism and `evaluatedAt`
+const handle = mountGraph(document.getElementById("graph"), graph);
+handle.select("concepts/example.md");
+```
 
-`generateVisualization` is a pure function of `(bundle, analysis, evaluatedAt)`. The same
-triple always produces the same bytes, and the generator never reads a clock.
+Cytoscape is a **peer dependency**. This package does not bundle it, so a
+consumer picks the version, dedupes it, and reaches the same `cy` instance the
+graph is drawn on. A consumer that needs a self-contained file inlines it at its
+own build step; `okf-page` does exactly that.
 
-`evaluatedAt` is optional. Omit it and the page is reproducible from the bundle alone, which
-is what `okf visualize` does unless `--today` is passed. Supply it — the same date passed to
-`analyzeBundle` as `today` — and the page can show staleness and prints the date it was judged
-against. It is an input rather than a field on the analysis so that `okf.inspect.v1` stays
-frozen; that schema is `additionalProperties: false` and is read across a process boundary.
+## License
 
-Passing `evaluatedAt` for an analysis that was never dated is refused, because it would print
-an evaluation date over no verdicts.
-
-## Browser storage
-
-Split orientation, split position and layout algorithm persist in `localStorage` under
-`okf.viz.prefs.v1`, keyed by bundle name. Every access is wrapped in `try`/`catch`: a page
-opened over `file://` throws on storage in some browsers. Filters and selection are
-deliberately not persisted — a remembered filter would hide pages added since the last visit.
+Apache-2.0.
