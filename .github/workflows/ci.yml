@@ -22,13 +22,33 @@ jobs:
       - run: pnpm check
       - name: Verify release packaging
         run: |
-          release_directory="$(mktemp -d)"
-          release_tag="v$(jq -r '.version' package.json)"
-          pnpm pack:release -- "$release_directory"
-          (cd "$release_directory" && sha256sum -c SHA256SUMS)
-          node scripts/verify-release-artifacts.mjs \
-            --tag "$release_tag" \
-            --directory "$release_directory"
-          node scripts/check-release-install.mjs \
-            --tag "$release_tag" \
-            --directory "$release_directory"
+          set -euo pipefail
+          root="$(mktemp -d)"
+          mkdir "$root/tarballs"
+
+          # A release publishes one package, but CI packs every one of them: a change to the
+          # release machinery must not pass by working for a single package.
+          mapfile -t tags < <(node scripts/verify-release.mjs |
+            jq -r '.packages[] | "\(.name)@\(.version)"')
+          test "${#tags[@]}" -gt 0
+
+          for tag in "${tags[@]}"; do
+            directory="$root/$(printf '%s' "$tag" | tr '/@' '__')"
+            pnpm pack:release -- --tag "$tag" "$directory"
+            (cd "$directory" && sha256sum -c SHA256SUMS)
+            node scripts/verify-release-artifacts.mjs \
+              --tag "$tag" \
+              --directory "$directory"
+            cp "$directory"/*.tgz "$root/tarballs/"
+          done
+
+          # Dependencies come from the packed tarballs rather than npm. A release resolves them
+          # from the registry instead, so that publishing a package ahead of its dependency
+          # fails; on a pull request there is nothing published yet to resolve against.
+          for tag in "${tags[@]}"; do
+            directory="$root/$(printf '%s' "$tag" | tr '/@' '__')"
+            node scripts/check-release-install.mjs \
+              --tag "$tag" \
+              --directory "$directory" \
+              --dependencies "$root/tarballs"
+          done
