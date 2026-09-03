@@ -1,9 +1,11 @@
-import type {
-  AnalyzedDocument,
-  BundleAnalysis,
-  BundleGraphEdge,
-  BundleGraphNode,
-  TrustTier,
+import {
+  OKF_ATTESTED_COMPUTATION,
+  okfTypeKey,
+  type AnalyzedDocument,
+  type BundleAnalysis,
+  type BundleGraphEdge,
+  type BundleGraphNode,
+  type TrustTier,
 } from "okf-contracts";
 
 /**
@@ -144,13 +146,13 @@ const PENDING_COLOR = "#94a3b8";
 const TRUST_RANK: readonly TrustTier[] = ["human-reviewed", "machine-confirmed", "unverified"];
 
 /** The type name OKF gives a page whose value may only be produced by a sanctioned run. */
-const ATTESTED = "Attested Computation";
+const ATTESTED = OKF_ATTESTED_COMPUTATION;
 
 const DEFAULT_SHAPE = "ellipse";
 
 /**
  * One shape per OKF type, so a reader tells a decision from a runbook without reading a label
- * or matching a shade. Keys are normalized (see `shapeKey`), which is what lets `ProjectBrief`,
+ * or matching a shade. Keys are normalized by `okfTypeKey`, which is what lets `ProjectBrief`,
  * `Project Brief` and `project-brief` agree instead of drifting into two shapes.
  *
  * `Attested Computation` takes the star deliberately: it is the one type whose presence changes
@@ -173,21 +175,9 @@ const SHAPES: Readonly<Record<string, string>> = {
   "pending": "ellipse",
 };
 
-/**
- * Fold a written type name onto its lookup key. The camel-case split runs first, so a one-word
- * `ProjectBrief` becomes the same key as the two-word spelling rather than missing the map.
- */
-function shapeKey(type: string): string {
-  return type
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
 /** An unmapped type keeps the neutral ellipse; an unknown type must not borrow another's shape. */
 function shapeOf(type: string): string {
-  return SHAPES[shapeKey(type)] ?? DEFAULT_SHAPE;
+  return SHAPES[okfTypeKey(type)] ?? DEFAULT_SHAPE;
 }
 
 /**
@@ -272,7 +262,7 @@ function usageWindowOf(value: unknown): VisualizationUsageWindow | null {
 function attestationOf(
   metadata: Readonly<Record<string, unknown>>,
 ): VisualizationAttestation | null {
-  if (metadata["type"] !== "Attested Computation") return null;
+  if (metadata["type"] !== ATTESTED) return null;
   const executor = mapping(metadata["executor"]);
   const receipt = executor && Array.isArray(executor["receipt"]) ? executor["receipt"] : [];
   const rawParameters = Array.isArray(metadata["parameters"]) ? metadata["parameters"] : [];

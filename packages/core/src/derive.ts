@@ -1,21 +1,28 @@
-import type {
-  AnalyzedDocument,
-  AnalyzedSource,
-  DerivedDocumentFields,
-  Diagnostic,
-  DocumentExtensions,
-  TrustTier,
-  UsageWindow,
+import {
+  OKF_ACTOR,
+  OKF_DATE,
+  OKF_DATETIME,
+  OKF_STATUSES,
+  type AnalyzedDocument,
+  type AnalyzedSource,
+  type DerivedDocumentFields,
+  type Diagnostic,
+  type DocumentExtensions,
+  type TrustTier,
+  type UsageWindow,
 } from "okf-contracts";
 
 import { diagnostic } from "./diagnostics.js";
 import { markdownHeadings } from "./markdown.js";
 import { resolveWithinBundle } from "./paths.js";
 
-const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const DATETIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
-const ACTOR = /^(?:human:[^\s/:]+|process:[^\s/:]+|[^\s/:]+\/[^\s/:]+)$/;
-const VALID_STATUSES = new Set(["draft", "stable", "deprecated"]);
+/**
+ * The `status` domain as a lookup. The domain itself lives in okf-contracts beside the
+ * specification that fixes it, as do the date, datetime, and actor grammars used below, so a
+ * validator here and a form elsewhere read one definition rather than two that drift.
+ */
+const VALID_STATUSES: ReadonlySet<string> = new Set(OKF_STATUSES);
+
 /**
  * Tags that mark a page as perishable, so it should say when it goes stale. Edit this set to
  * match what a bundle actually tags; it only catches pages someone remembered to tag.
@@ -38,7 +45,7 @@ function mapping(value: unknown): value is Record<string, unknown> {
 }
 
 export function validDate(value: string): boolean {
-  const match = DATE.exec(value);
+  const match = OKF_DATE.exec(value);
   if (!match) {
     return false;
   }
@@ -56,7 +63,7 @@ function validRecordedAt(value: unknown): boolean {
   if (validDate(value)) {
     return true;
   }
-  const match = DATETIME.exec(value);
+  const match = OKF_DATETIME.exec(value);
   if (!match || !validDate(match[1]!)) {
     return false;
   }
@@ -69,7 +76,7 @@ function validRecordedAt(value: unknown): boolean {
 }
 
 function validActor(value: unknown): boolean {
-  return typeof value === "string" && ACTOR.test(value);
+  return typeof value === "string" && OKF_ACTOR.test(value);
 }
 
 function trustTier(metadata: Readonly<Record<string, unknown>>): TrustTier {

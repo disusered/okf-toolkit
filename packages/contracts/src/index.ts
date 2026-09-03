@@ -237,3 +237,19 @@ export {
   type OkfV1McpOptions,
   type OkfV1Operations,
 } from "./mcp.js";
+
+export {
+  OKF_ACTOR,
+  OKF_ATTESTED_COMPUTATION,
+  OKF_DATE,
+  OKF_DATETIME,
+  OKF_STATUSES,
+  OKF_V02_ATTESTED_COMPUTATION_FIELDS,
+  OKF_V02_CONCEPT_FIELDS,
+  OKF_V02_ROOT_INDEX_FIELDS,
+  okfFieldsForType,
+  okfTypeKey,
+  type OkfFieldDescriptor,
+  type OkfFieldWidget,
+  type OkfStatus,
+} from "./fields.js";
