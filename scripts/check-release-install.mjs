@@ -22,6 +22,7 @@ function run(command, arguments_, cwd) {
 const tag = argumentValue("--tag");
 const directory = resolve(root, argumentValue("--directory"));
 const plan = await loadReleasePlan({ tag });
+const target = plan.target;
 const releaseManifest = JSON.parse(
   await readFile(join(directory, "RELEASE.json"), "utf8"),
 );
@@ -29,21 +30,18 @@ if (releaseManifest.tag !== tag) throw new Error("release manifest tag mismatch"
 
 const installation = await mkdtemp(join(tmpdir(), "okf-release-install-"));
 try {
-  const dependencies = {};
-  const overrides = {};
-  for (const releasePackage of plan.packages) {
-    const tarball = `file:${join(directory, releasePackage.filename)}`;
-    dependencies[releasePackage.name] = tarball;
-    overrides[releasePackage.name] = tarball;
-  }
+  const tarball = `file:${join(directory, target.filename)}`;
+  // Only the package being released comes from the tarball. Its `okf-*` dependencies resolve
+  // from the registry, which is the point: releasing a package whose dependency has not been
+  // published yet must fail here rather than after publication.
   await writeFile(
     join(installation, "package.json"),
     `${JSON.stringify(
       {
-        dependencies,
+        dependencies: { [target.name]: tarball },
         name: "okf-release-install-check",
         packageManager: plan.packageManager,
-        pnpm: { overrides },
+        pnpm: { overrides: { [target.name]: tarball } },
         private: true,
         type: "module",
       },
@@ -58,15 +56,23 @@ try {
     [
       "--input-type=module",
       "--eval",
-      `await Promise.all(${JSON.stringify(
-        plan.packages.map(({ name }) => name),
-      )}.map((name) => import(name)));`,
+      `await import(${JSON.stringify(target.name)});`,
     ],
     installation,
   );
-  run(join(installation, "node_modules", ".bin", "okf"), [], installation);
+  const binaries = Object.keys(
+    JSON.parse(
+      await readFile(
+        join(root, "packages", target.directory, "package.json"),
+        "utf8",
+      ),
+    ).bin ?? {},
+  );
+  for (const binary of binaries) {
+    run(join(installation, "node_modules", ".bin", binary), [], installation);
+  }
 } finally {
   await rm(installation, { force: true, recursive: true });
 }
 
-console.log(`Installed and imported all packages for ${plan.expectedTag}`);
+console.log(`Installed and imported ${target.name}@${target.version}`);

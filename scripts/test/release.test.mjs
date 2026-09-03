@@ -1,29 +1,34 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { loadReleasePlan, parseVersion } from "../release-config.mjs";
+import {
+  loadReleasePlan,
+  packFilename,
+  parseReleaseTag,
+  parseVersion,
+  releaseTag,
+} from "../release-config.mjs";
 
 /*
- * Read the version rather than hardcoding it. These assertions used to name a release
- * literally, so every version bump failed a test that was not about versions.
+ * Read versions rather than hardcoding them. These assertions used to name a release literally,
+ * so every version bump failed a test that was not about versions. Now that each package carries
+ * its own version, hardcoding one would fail for six packages instead of one.
  */
-const VERSION = JSON.parse(
-  await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-).version;
-const TAG = `v${VERSION}`;
+async function manifestVersion(directory) {
+  return JSON.parse(
+    await readFile(
+      new URL(`../../packages/${directory}/package.json`, import.meta.url),
+      "utf8",
+    ),
+  ).version;
+}
 
-/*
- * The dist tag and the prerelease flag are derived from the version too, so naming
- * either literally reintroduces the same coupling one level up: `1.0.0` publishes to
- * `latest`, and every `-rc.N` before it published to `next`.
- */
-const PRERELEASE = parseVersion(VERSION).prerelease;
+const VIZ_VERSION = await manifestVersion("viz");
+const CLI_VERSION = await manifestVersion("cli");
 
-test("release plan fixes package order and prerelease tag", async () => {
-  const plan = await loadReleasePlan({ tag: TAG });
-  assert.equal(plan.distTag, PRERELEASE ? "next" : "latest");
-  assert.equal(plan.packageManager, "pnpm@10.28.2");
-  assert.equal(plan.prerelease, PRERELEASE);
+test("the workspace check validates every package without a tag", async () => {
+  const plan = await loadReleasePlan();
+  assert.equal(plan.target, null);
   assert.deepEqual(
     plan.packages.map(({ name }) => name),
     [
@@ -36,17 +41,65 @@ test("release plan fixes package order and prerelease tag", async () => {
       "@disusered/okf-cli",
     ],
   );
-  assert.equal(
-    plan.packages.at(-1)?.filename,
-    `disusered-okf-cli-${VERSION}.tgz`,
-  );
+  // Dependency order is a repository invariant, not a release schedule.
+  const indexes = new Map(plan.packages.map(({ name }, index) => [name, index]));
+  assert.ok(indexes.get("okf-contracts") < indexes.get("okf-core"));
+  assert.ok(indexes.get("okf-viz") < indexes.get("@disusered/okf-cli"));
 });
 
-test("release plan rejects a tag that does not match the package version", async () => {
+test("a tag resolves exactly one package to release", async () => {
+  const plan = await loadReleasePlan({ tag: `okf-viz@${VIZ_VERSION}` });
+  assert.equal(plan.target.name, "okf-viz");
+  assert.equal(plan.target.version, VIZ_VERSION);
+  assert.equal(plan.expectedTag, `okf-viz@${VIZ_VERSION}`);
+  assert.equal(plan.distTag, parseVersion(VIZ_VERSION).prerelease ? "next" : "latest");
+  assert.equal(plan.packageManager, "pnpm@10.28.2");
+});
+
+test("a scoped package keeps its leading @ in the tag and loses it in the filename", async () => {
+  const tag = `@disusered/okf-cli@${CLI_VERSION}`;
+  const plan = await loadReleasePlan({ tag });
+  assert.equal(plan.target.name, "@disusered/okf-cli");
+  assert.equal(plan.target.filename, `disusered-okf-cli-${CLI_VERSION}.tgz`);
+  assert.deepEqual(parseReleaseTag(tag), {
+    name: "@disusered/okf-cli",
+    version: CLI_VERSION,
+  });
+  assert.equal(releaseTag("@disusered/okf-cli", CLI_VERSION), tag);
+  assert.equal(packFilename("okf-viz", "2.0.0"), "okf-viz-2.0.0.tgz");
+});
+
+test("package versions are independent of one another", async () => {
+  const plan = await loadReleasePlan();
+  // The point of the per-package release: nothing requires two packages to agree, and the
+  // workspace root's version is not a release version at all.
+  assert.equal(typeof plan.workspaceVersions["okf-contracts"], "string");
+  assert.equal(plan.workspaceVersions["okf-viz"], VIZ_VERSION);
+  for (const { name, version } of plan.packages) {
+    assert.equal(plan.workspaceVersions[name], version);
+    assert.doesNotThrow(() => parseVersion(version));
+  }
+});
+
+test("release tags are rejected when malformed or wrong", async () => {
   await assert.rejects(
-    loadReleasePlan({ tag: "v0.0.0-not-the-version" }),
-    new RegExp(`release tag must be ${TAG.replace(/[.\-+]/g, "\\$&")}`),
+    loadReleasePlan({ tag: `v${VIZ_VERSION}` }),
+    /release tag must be <name>@<version>/,
   );
+  await assert.rejects(
+    loadReleasePlan({ tag: "okf-viz" }),
+    /release tag must be <name>@<version>/,
+  );
+  await assert.rejects(
+    loadReleasePlan({ tag: "not-a-package@1.0.0" }),
+    /release tag names an unknown package: not-a-package/,
+  );
+  await assert.rejects(
+    loadReleasePlan({ tag: "okf-viz@0.0.0-not-the-version" }),
+    new RegExp(`release tag must be okf-viz@${VIZ_VERSION.replace(/[.\-+]/g, "\\$&")}`),
+  );
+  assert.equal(parseReleaseTag("okf-viz"), null);
+  assert.equal(parseReleaseTag("@scope/name"), null);
 });
 
 test("version parsing follows SemVer prerelease rules", () => {
@@ -80,4 +133,18 @@ test("release workflow uses OIDC without an npm publish token", async () => {
     workflow,
     /NODE_AUTH_TOKEN|NPM_BOOTSTRAP_TOKEN|NPM_TOKEN/,
   );
+});
+
+test("release workflow releases one package, not the whole workspace", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+
+  // The seven-package assumption used to be hardcoded in five places. If any of them comes
+  // back, a single-package release will silently try to publish packages it never built.
+  assert.doesNotMatch(workflow, /\(\.packages \| length\) == 7/);
+  assert.doesNotMatch(workflow, /okf-signatures\s+okf-cloudflare/);
+  assert.match(workflow, /PACKAGE_NAME/);
+  assert.match(workflow, /\.package\.name/);
 });
