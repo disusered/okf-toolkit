@@ -1,6 +1,6 @@
 {
   "name": "okf-viz",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Deterministic, self-contained HTML visualization for an analyzed OKF bundle",
   "type": "module",
   "repository": {

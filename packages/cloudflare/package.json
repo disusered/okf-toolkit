@@ -1,6 +1,6 @@
 {
   "name": "okf-cloudflare",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "One-bundle R2, MCP, and queue composition for OKF",
   "type": "module",
   "repository": {
