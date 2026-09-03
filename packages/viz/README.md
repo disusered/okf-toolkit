@@ -4,7 +4,7 @@
 analysis to graph data, and the browser rendering of that data.
 
 It is a library, not a page. If you want a finished HTML file you can open
-without a network, use [`okf-page`](../page), which builds one around this
+without a network, use the CLI (`okf visualize`), which builds one around this
 graph.
 
 ```ts
@@ -44,7 +44,7 @@ handle.select("concepts/example.md");
 Cytoscape is a **peer dependency**. This package does not bundle it, so a
 consumer picks the version, dedupes it, and reaches the same `cy` instance the
 graph is drawn on. A consumer that needs a self-contained file inlines it at its
-own build step; `okf-page` does exactly that.
+own build step; the CLI does exactly that.
 
 ## License
 

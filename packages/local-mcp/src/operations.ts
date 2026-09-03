@@ -12,7 +12,7 @@ import {
   readBundleContext,
   type ResolvedBundleTarget,
 } from "okf-node";
-import { generateVisualization } from "okf-page";
+import { generateVisualization } from "@disusered/okf-cli";
 
 import type { BundleSettings } from "./bundle.js";
 

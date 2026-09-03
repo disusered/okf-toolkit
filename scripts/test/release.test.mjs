@@ -35,7 +35,6 @@ test("the workspace check validates every package without a tag", async () => {
       "okf-contracts",
       "okf-core",
       "okf-viz",
-      "okf-page",
       "okf-node",
       "okf-signatures",
       "okf-cloudflare",
@@ -45,8 +44,7 @@ test("the workspace check validates every package without a tag", async () => {
   // Dependency order is a repository invariant, not a release schedule.
   const indexes = new Map(plan.packages.map(({ name }, index) => [name, index]));
   assert.ok(indexes.get("okf-contracts") < indexes.get("okf-core"));
-  assert.ok(indexes.get("okf-viz") < indexes.get("okf-page"));
-  assert.ok(indexes.get("okf-page") < indexes.get("@disusered/okf-cli"));
+  assert.ok(indexes.get("okf-viz") < indexes.get("@disusered/okf-cli"));
 });
 
 test("a tag resolves exactly one package to release", async () => {
