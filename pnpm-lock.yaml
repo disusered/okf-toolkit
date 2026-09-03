@@ -26,9 +26,9 @@ importers:
       okf-node:
         specifier: workspace:*
         version: link:../node
-      okf-viz:
+      okf-page:
         specifier: workspace:*
-        version: link:../viz
+        version: link:../page
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -92,9 +92,9 @@ importers:
       okf-node:
         specifier: workspace:*
         version: link:../node
-      okf-viz:
+      okf-page:
         specifier: workspace:*
-        version: link:../viz
+        version: link:../page
     devDependencies:
       '@modelcontextprotocol/client':
         specifier: 2.0.0
@@ -125,6 +125,25 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/page:
+    dependencies:
+      okf-contracts:
+        specifier: workspace:*
+        version: link:../contracts
+      okf-viz:
+        specifier: workspace:*
+        version: link:../viz
+    devDependencies:
+      cytoscape:
+        specifier: 3.34.1
+        version: 3.34.1
+      dompurify:
+        specifier: 3.4.13
+        version: 3.4.13
+      marked:
+        specifier: 18.0.10
+        version: 18.0.10
+
   packages/signatures:
     dependencies:
       okf-core:
@@ -137,15 +156,12 @@ importers:
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
+      '@types/cytoscape':
+        specifier: 3.31.0
+        version: 3.31.0
       cytoscape:
         specifier: 3.34.1
         version: 3.34.1
-      dompurify:
-        specifier: 3.4.13
-        version: 3.4.13
-      marked:
-        specifier: 18.0.10
-        version: 18.0.10
 
 packages:
 
@@ -160,6 +176,10 @@ packages:
   '@modelcontextprotocol/server@2.0.0':
     resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
     engines: {node: '>=20'}
+
+  '@types/cytoscape@3.31.0':
+    resolution: {integrity: sha512-EXHOHxqQjGxLDEh5cP4te6J0bi7LbCzmZkzsR6f703igUac8UGMdEohMyU3GHAayCTZrLQOMnaE/lqB2Ekh8Ww==}
+    deprecated: This is a stub types definition. cytoscape provides its own type definitions, so you do not need this installed.
 
   '@types/debug@4.1.13':
     resolution: {integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==}
@@ -483,6 +503,10 @@ snapshots:
     dependencies:
       '@modelcontextprotocol/core': 2.0.0
       zod: 4.4.3
+
+  '@types/cytoscape@3.31.0':
+    dependencies:
+      cytoscape: 3.34.1
 
   '@types/debug@4.1.13':
     dependencies:

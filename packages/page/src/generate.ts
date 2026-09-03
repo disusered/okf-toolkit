@@ -1,6 +1,6 @@
 import type { BundleAnalysis } from "okf-contracts";
+import { toVisualizationGraph } from "okf-viz";
 
-import { toVisualizationGraph } from "./graph.js";
 import { PAGE_SCRIPT } from "./page/script.js";
 import { PAGE_STYLE } from "./page/style.js";
 import { CYTOSCAPE_SOURCE, CYTOSCAPE_VERSION } from "./vendor/cytoscape.js";

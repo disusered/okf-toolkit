@@ -16,6 +16,7 @@ export const releasePackages = [
   { directory: "contracts", name: "okf-contracts" },
   { directory: "core", name: "okf-core" },
   { directory: "viz", name: "okf-viz" },
+  { directory: "page", name: "okf-page" },
   { directory: "node", name: "okf-node" },
   { directory: "signatures", name: "okf-signatures" },
   { directory: "cloudflare", name: "okf-cloudflare" },

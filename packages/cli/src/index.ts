@@ -12,7 +12,7 @@ import {
   watchBundle,
   type ResolvedBundleTarget,
 } from "okf-node";
-import { generateVisualization } from "okf-viz";
+import { generateVisualization } from "okf-page";
 import { parseArguments, type CliArguments } from "./arguments.js";
 import { HELP } from "./help.js";
 import { stableJson } from "./json.js";
