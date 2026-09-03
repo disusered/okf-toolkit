@@ -45,7 +45,7 @@ const REQUIRED_PATHS = {
     "package/schemas/okf.operations.v1.schema.json",
     "package/spec/SPEC.md",
   ],
-  "okf-page": ["package/THIRD_PARTY_NOTICES.md"],
+  "@disusered/okf-cli": ["package/THIRD_PARTY_NOTICES.md"],
 };
 
 const tag = argumentValue("--tag");

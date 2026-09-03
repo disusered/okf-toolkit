@@ -34,11 +34,11 @@
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js"
   },
   "dependencies": {
+    "@disusered/okf-cli": "workspace:*",
     "@modelcontextprotocol/server": "2.0.0",
     "okf-contracts": "workspace:*",
     "okf-core": "workspace:*",
-    "okf-node": "workspace:*",
-    "okf-page": "workspace:*"
+    "okf-node": "workspace:*"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",

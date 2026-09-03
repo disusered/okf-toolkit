@@ -12,7 +12,7 @@ import {
   watchBundle,
   type ResolvedBundleTarget,
 } from "okf-node";
-import { generateVisualization } from "okf-page";
+import { generateVisualization } from "./generate.js";
 import { parseArguments, type CliArguments } from "./arguments.js";
 import { HELP } from "./help.js";
 import { stableJson } from "./json.js";
@@ -308,3 +308,5 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
 
 export { parseArguments } from "./arguments.js";
 export { stableJson } from "./json.js";
+export { generateVisualization, GeneratorError } from "./generate.js";
+export type { VisualizationInput } from "./generate.js";
