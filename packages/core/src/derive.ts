@@ -13,7 +13,7 @@ import {
 } from "okf-contracts";
 
 import { diagnostic } from "./diagnostics.js";
-import { markdownHeadings } from "./markdown.js";
+import { headingsFromRoot, type MarkdownRoot } from "./markdown.js";
 import { resolveWithinBundle } from "./paths.js";
 
 /**
@@ -429,7 +429,7 @@ function checkAttestationContract(
 
 export function deriveDocumentFields(
   metadata: Readonly<Record<string, unknown>>,
-  body: string,
+  parsed: MarkdownRoot,
   path: string,
   knownPaths: ReadonlySet<string>,
   nonDocumentPaths: ReadonlySet<string>,
@@ -467,7 +467,7 @@ export function deriveDocumentFields(
   const validStaleAfter = staleAfter !== null && validDate(staleAfter) ? staleAfter : null;
   const validToday = today !== null && validDate(today) ? today : null;
   const statusValue = nonempty(metadata["status"]);
-  const heading = markdownHeadings(body).find(({ depth }) => depth === 1)?.text.trim();
+  const heading = headingsFromRoot(parsed).find(({ depth }) => depth === 1)?.text.trim();
   const filename = path.split("/").at(-1)?.replace(/\.md$/i, "") ?? path;
 
   return {

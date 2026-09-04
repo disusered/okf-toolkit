@@ -35,6 +35,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "diff": "^9.0.0",
     "mdast-util-from-markdown": "^2.0.2",
     "okf-contracts": "workspace:*",
     "yaml": "^2.9.0"

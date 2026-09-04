@@ -3,7 +3,7 @@ import type { Diagnostic, DocumentKind } from "okf-contracts";
 import { diagnostic } from "./diagnostics.js";
 import { validDate } from "./derive.js";
 import type { FrontmatterParseResult } from "./frontmatter.js";
-import { markdownBlocks, markdownHeadings } from "./markdown.js";
+import { blocksFromRoot, headingsFromRoot, type MarkdownRoot } from "./markdown.js";
 import { isSafeMarkdownPath } from "./paths.js";
 
 export function documentKind(path: string): DocumentKind {
@@ -15,6 +15,7 @@ export function coreDiagnostics(
   path: string,
   kind: DocumentKind,
   parsed: FrontmatterParseResult,
+  body: MarkdownRoot,
 ): readonly Diagnostic[] {
   const result: Diagnostic[] = [];
   if (!isSafeMarkdownPath(path)) {
@@ -102,7 +103,7 @@ export function coreDiagnostics(
         ),
       );
     }
-    if (markdownHeadings(parsed.body).length === 0) {
+    if (headingsFromRoot(body).length === 0) {
       result.push(
         diagnostic("core", "error", "core.index.heading.missing", path, "index must contain a Markdown heading"),
       );
@@ -115,7 +116,7 @@ export function coreDiagnostics(
       diagnostic("core", "error", "core.log.frontmatter.forbidden", path, "log.md must not contain frontmatter"),
     );
   }
-  const blocks = markdownBlocks(parsed.body);
+  const blocks = blocksFromRoot(body);
   const headings = blocks.flatMap((block) => block.type === "heading" ? [block] : []);
   if (headings.length === 0) {
     result.push(diagnostic("core", "error", "core.log.heading.missing", path, "log must contain a Markdown heading"));
