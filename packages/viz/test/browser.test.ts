@@ -118,3 +118,86 @@ test("layout names are the ones the page offers", () => {
   assert.equal(isLayoutName("cose"), true);
   assert.equal(isLayoutName("nonsense"), false);
 });
+
+/** A stand-in for the parts of Cytoscape mountGraph reaches, recording what it was asked. */
+function fakeCytoscape(ids: readonly string[]) {
+  const asked: { fitted: string[][]; padding: number[] } = { fitted: [], padding: [] };
+  const collection = (members: string[]) => ({
+    length: members.length,
+    members,
+    id: () => members[0] ?? "",
+    select() {}, unselect() {}, toggleClass() {},
+    data: () => undefined,
+    renderedPosition: () => ({ x: 0, y: 0 }),
+    forEach(run: (element: unknown) => void) {
+      for (const member of members) run(collection([member]));
+    },
+  });
+  const cy = {
+    on() {},
+    elements: () => collection([...ids]),
+    filter: (match: (element: { id(): string }) => boolean) =>
+      collection(ids.filter((id) => match({ id: () => id }))),
+    getElementById: (id: string) => collection(ids.includes(id) ? [id] : []),
+    layout: () => ({ run() {} }),
+    resize() {},
+    fit(elements: unknown, padding: number) {
+      asked.fitted.push([...(elements as { members: string[] }).members]);
+      asked.padding.push(padding);
+    },
+    zoom: () => 1,
+    center() {}, animate() {}, destroy() {},
+  };
+  return { asked, cytoscape: () => cy };
+}
+
+const GRAPH = {
+  edges: [],
+  nodes: [
+    { id: "a.md", authorKind: "human", pending: false, stale: null, status: "draft",
+      trustTier: "unverified", title: "A", color: "#000", size: 20, shape: "ellipse" },
+    { id: "b.md", authorKind: "human", pending: false, stale: null, status: "draft",
+      trustTier: "unverified", title: "B", color: "#000", size: 20, shape: "ellipse" },
+    { id: "c.md", authorKind: "human", pending: false, stale: null, status: "draft",
+      trustTier: "unverified", title: "C", color: "#000", size: 20, shape: "ellipse" },
+  ],
+} as unknown as Parameters<typeof import("../src/browser/index.js").mountGraph>[1];
+
+async function mounted(ids: readonly string[]) {
+  const { mountGraph } = await import("../src/browser/index.js");
+  const fake = fakeCytoscape(ids);
+  const container = {
+    getBoundingClientRect: () => ({ height: 600, width: 800 }),
+  } as unknown as HTMLElement;
+  const handle = mountGraph(container, GRAPH, { cytoscape: fake.cytoscape as never });
+  return { asked: fake.asked, handle };
+}
+
+test("framing a set fits exactly those nodes", async () => {
+  // A focus mode has already decided what matters; the camera should show that and no more.
+  const { asked, handle } = await mounted(["a.md", "b.md", "c.md"]);
+  handle.frame(["a.md", "b.md"]);
+  assert.deepEqual(asked.fitted.at(-1), ["a.md", "b.md"]);
+  assert.equal(asked.padding.at(-1), 90);
+});
+
+test("an id the graph does not carry is ignored rather than fitted", async () => {
+  const { asked, handle } = await mounted(["a.md", "b.md"]);
+  handle.frame(["a.md", "nobody-wrote-this.md"]);
+  assert.deepEqual(asked.fitted.at(-1), ["a.md"]);
+});
+
+test("nothing to frame leaves the camera alone", async () => {
+  // Fitting an empty collection would throw the view somewhere arbitrary.
+  const { asked, handle } = await mounted(["a.md"]);
+  const before = asked.fitted.length;
+  handle.frame([]);
+  handle.frame(["not-here.md"]);
+  assert.equal(asked.fitted.length, before);
+});
+
+test("the caller may widen the padding", async () => {
+  const { asked, handle } = await mounted(["a.md"]);
+  handle.frame(["a.md"], 200);
+  assert.equal(asked.padding.at(-1), 200);
+});
