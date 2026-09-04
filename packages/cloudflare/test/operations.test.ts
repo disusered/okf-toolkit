@@ -104,9 +104,9 @@ test("onApplied receives the written bundle without listing it again", async () 
   const seen: { paths: readonly string[]; nodes: number }[] = [];
   const operations = createR2OkfV1Operations({
     adapter,
-    onApplied: (analysis) => {
+    onApplied: ({ analysis, documents }) => {
       seen.push({
-        paths: analysis.documents.map((document) => document.path),
+        paths: documents.map((document) => document.path),
         nodes: analysis.graph.nodes.length,
       });
     },

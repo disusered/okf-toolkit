@@ -42,17 +42,25 @@ export interface R2OkfV1OperationsOptions {
     | (() => Promise<readonly OkfContextDocument[]>);
   readonly visualizationUrl?: string | null;
   /**
-   * Called after a change reaches storage, with the analysis of the bundle as written.
+   * Called after a change reaches storage, with the bundle as written.
    *
    * A consumer that derives something from the whole bundle after a write — a generated view,
-   * say — would otherwise have to list and analyse it a second time, doubling the work of an
-   * apply inside one invocation. The analysis passed here is the one the apply already
-   * computed to validate the change, so reusing it is free.
+   * say — would otherwise list and analyse it a second time, doubling the work of an apply
+   * inside a single invocation. Both the documents and the analysis the apply already computed
+   * are passed, because reusing them is free.
+   *
+   * Prefer `analysis` when the derived artifact should agree with what validation saw. Use
+   * `documents` when it must not: this analysis was produced with the configured
+   * `analysis.today`, so anything derived from `stale` or `staleAfter` would change with the
+   * clock rather than with the corpus.
    *
    * It is awaited inside the request, and a throw propagates: a consumer whose own policy is
    * that a derived artifact must never fail a write that already succeeded handles that here.
    */
-  readonly onApplied?: (analysis: BundleAnalysis) => Promise<void> | void;
+  readonly onApplied?: (written: {
+    readonly analysis: BundleAnalysis;
+    readonly documents: readonly RawBundleDocument[];
+  }) => Promise<void> | void;
 }
 
 /** Read explicitly configured instruction objects without widening the authored bundle adapter. */
@@ -211,12 +219,17 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
   const checkChange = async (
     change: Change,
     listing: R2BundleListing,
-  ): Promise<{ readonly preview: ChangePreview; readonly analysis: BundleAnalysis }> => {
+  ): Promise<{
+    readonly preview: ChangePreview;
+    readonly analysis: BundleAnalysis;
+    readonly documents: readonly RawBundleDocument[];
+  }> => {
     const proposed = proposedDocuments(listing.documents, change);
     const analysis = analyzeBundle(proposed.documents, withFiles(listing));
     const diagnostics = [...proposed.diagnostics, ...allDiagnostics(analysis)];
     return {
       analysis,
+      documents: proposed.documents,
       preview: {
         schema: OPERATIONS_SCHEMA,
         passed: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
@@ -393,7 +406,7 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
           }
           try {
             const revisions = await options.adapter.applyStorageChange(change, expectedPreviewId);
-            await options.onApplied?.(moved);
+            await options.onApplied?.({ analysis: moved, documents: desired });
             return {
               schema: OPERATIONS_SCHEMA,
               outcome: "applied",
@@ -411,13 +424,13 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
         }
       }
 
-      const { preview: checked, analysis } = await checkChange(change, listing);
+      const { preview: checked, analysis, documents: written } = await checkChange(change, listing);
       if (!checked.passed) {
         return rejected(change, checked.diagnostics);
       }
       try {
         const revisions = await options.adapter.applyStorageChange(change, expectedPreviewId);
-        await options.onApplied?.(analysis);
+        await options.onApplied?.({ analysis, documents: written });
         return {
           schema: OPERATIONS_SCHEMA,
           outcome: "applied",
