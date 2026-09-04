@@ -9,6 +9,13 @@ import type {
   BundleGraphNode,
 } from "okf-contracts";
 import { toVisualizationGraph } from "okf-viz";
+import {
+  DARK_THEME,
+  graphStylesheet,
+  layoutOptions,
+  LIGHT_THEME,
+  nodeClasses,
+} from "okf-viz/browser";
 
 import { generateVisualization, GeneratorError } from "../src/index.js";
 import { PAGE_SCRIPT } from "../src/page/script.js";
@@ -160,7 +167,7 @@ test("preserves canonical graph relations and distinguishes source edges", () =>
       bundle: "handbook",
       analysis: { ...BUNDLE, graph: { ...BUNDLE.graph, edges: [sourceEdge] } },
     }),
-    /edge\[relation = "source"\]/,
+    /edge\[relation = \\"source\\"\]/,
   );
 });
 
@@ -312,8 +319,10 @@ test("the reader is laid out beside the graph and can still scroll", () => {
   // The graph draws type, authorship and trust; it still carries no legend row, because the
   // reader's metadata table is where a signal gets named in words rather than in a key.
   assert.ok(!html.includes('id="legend"'), "no legend row");
-  assert.match(html, /selector: "node\.author-human"/);
-  assert.match(html, /selector: "node\.unchecked"/);
+  // The stylesheet is okf-viz's, embedded as data. Its rule order is that package's
+  // invariant and is tested there; here the question is only whether it arrived.
+  assert.match(html, /"selector":"node\.author-human"/);
+  assert.match(html, /"selector":"node\.unchecked"/);
   // Cytoscape resolves conflicts by array order and the last rule wins. Stale must therefore
   // follow both fading rules, and every new rule must precede selection and filtering.
   assert.ok(html.indexOf('"node.unchecked"') < html.indexOf('"node.stale"'), "stale beats dimming");
@@ -409,7 +418,7 @@ test("each type gets its own shape, and an unmapped type falls back to an ellips
     ),
   });
   assert.match(html, /"shape":"star"/);
-  assert.match(html, /"shape": "data\(shape\)"/);
+  assert.match(html, /"shape":"data\(shape\)"/);
 });
 
 test("a link to an Attested Computation is drawn as its own kind of edge", () => {
@@ -437,7 +446,7 @@ test("a link to an Attested Computation is drawn as its own kind of edge", () =>
   assert.equal(intoComputation?.relation, "link");
 
   const html = generateVisualization({ bundle: "b", analysis: analysis(documents, nodes, edges) });
-  assert.match(html, /selector: "edge\.attested"/);
+  assert.match(html, /"selector":"edge\.attested"/);
   assert.ok(html.indexOf('"edge.attested"') < html.indexOf('"edge:selected"'));
 });
 
@@ -539,4 +548,51 @@ test("source usage is drawn as a bar scaled to the busiest source on the page", 
   assert.match(PAGE_SCRIPT, /sourcesEl\.appendChild\(caption\);/);
   assert.match(PAGE_STYLE, /\.usage-bar \{/);
   assert.match(PAGE_STYLE, /\.usage-fill \{/);
+});
+
+/** The embedded payload, which is where the graph's encoding now travels. */
+function payloadOf(html: string): {
+  encoding: {
+    classes: Record<string, string[]>;
+    layout: Record<string, unknown>;
+    style: { dark: unknown[]; light: unknown[] };
+  };
+} {
+  const found = /id="okf-graph" type="application\/json">([\s\S]*?)<\/script>/.exec(html);
+  assert.ok(found !== null, "the page carries no payload");
+  return JSON.parse(found[1] ?? "{}");
+}
+
+test("the page carries the library's encoding rather than a copy of it", () => {
+  /*
+   * The point of the split. The page used to build the Cytoscape stylesheet and the node
+   * classes itself, so there were two implementations of what a node looks like and nothing
+   * keeping them in step. Equality here is what makes okf-viz the only one: a rule the library
+   * changes reaches the page without anybody editing this package.
+   */
+  const encoding = payloadOf(generateVisualization({ bundle: "handbook", analysis: BUNDLE }))
+    .encoding;
+
+  assert.deepEqual(encoding.style.dark, graphStylesheet(DARK_THEME));
+  assert.deepEqual(encoding.style.light, graphStylesheet(LIGHT_THEME));
+  assert.deepEqual(encoding.layout, layoutOptions("cose"));
+
+  // Both themes travel because the authorship ring is chosen at view time: a near-black ring
+  // is invisible on a dark background, and that ring is a signal that must always read.
+  assert.notDeepEqual(encoding.style.dark, encoding.style.light);
+
+  const graph = toVisualizationGraph(BUNDLE);
+  for (const node of graph.nodes) {
+    assert.deepEqual(encoding.classes[node.id], nodeClasses(node), `classes for ${node.id}`);
+  }
+});
+
+test("this package declares no graph encoding of its own", async () => {
+  // A rule written here again would be a second implementation, however it was spelled.
+  const { readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const script = await readFile(join(process.cwd(), "src", "page", "script.ts"), "utf8");
+  assert.doesNotMatch(script, /selector:/);
+  assert.doesNotMatch(script, /"border-style"|"background-color"|target-arrow-shape/);
+  assert.match(script, /payload\.encoding\.style/);
 });
