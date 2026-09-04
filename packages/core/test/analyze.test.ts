@@ -49,8 +49,28 @@ test("analyzes the shared valid v0.2 fixture without losing extensions", async (
   });
   assert.deepEqual(codes(analysis, "core"), []);
   assert.deepEqual(codes(analysis, "guidance"), ["guidance.link.broken"]);
-  assert.equal(analysis.graph.nodes.length, 3);
-  assert.equal(analysis.graph.edges.length, 3);
+  /*
+   * Five nodes, not three: the two indexes are in the graph. Their links are authored — a
+   * person wrote each entry, grouped it under a heading and described it — so leaving them out
+   * dropped the spine of the bundle and drew the rest as unrelated islands.
+   */
+  assert.equal(analysis.graph.nodes.length, 5);
+  assert.deepEqual(
+    analysis.graph.nodes.filter((node) => node.type === "Index").map((node) => node.path),
+    ["guides/index.md", "index.md"],
+  );
+  assert.equal(analysis.graph.edges.length, 5);
+  // Both the root index and the nested one reach the page they list.
+  for (const source of ["index.md", "guides/index.md"]) {
+    assert.ok(
+      analysis.graph.edges.some(
+        (edge) => edge.source === source && edge.target === "guides/release.md",
+      ),
+      `${source} should link to the page it lists`,
+    );
+  }
+  // A log is a dated history of what happened, not a statement of what relates to what.
+  assert.equal(analysis.graph.nodes.some((node) => node.path.endsWith("log.md")), false);
 
   const release = analysis.documents.find((document) => document.path === "guides/release.md");
   assert.ok(release);
