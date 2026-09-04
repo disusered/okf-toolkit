@@ -167,6 +167,25 @@ export interface BundleGraph {
   readonly edges: readonly BundleGraphEdge[];
 }
 
+export interface BundleIndexEntry {
+  readonly kind: "directory" | "document";
+  readonly path: string;
+  readonly href: string;
+  readonly title: string;
+  readonly description: string | null;
+}
+
+/** Generated navigation, separate from the authored document and graph contracts. */
+export interface BundleDirectoryIndex {
+  readonly schema: "okf.index.v1";
+  readonly generated: true;
+  readonly directory: string;
+  readonly path: string;
+  readonly title: string;
+  readonly entries: readonly BundleIndexEntry[];
+  readonly content: string;
+}
+
 export interface BundleSummary {
   readonly documents: number;
   readonly concepts: number;

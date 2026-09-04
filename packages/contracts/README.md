@@ -7,6 +7,9 @@ verbatim copy of the OKF v0.2 specification.
 
 - `okf.inspect.v1` is the deterministic full-bundle analysis returned by
   `okf inspect --json`.
+- `okf.index.v1` describes generated navigation for one directory, independently
+  of the frozen inspect schema. `OkfV1Operations.index` and `okf_v1_index`
+  expose it without changing authored documents.
 - `okf.operations.v1` covers create, update, delete, move, preview, and apply
   results. Revisions are opaque strings.
 - `okf-contracts/fields` describes the frontmatter vocabulary §4.1, §5, §7, and

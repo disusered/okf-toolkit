@@ -121,7 +121,7 @@ test("onApplied receives the written bundle without listing it again", async () 
   assert.equal(seen.length, 1);
   // The analysis is of the bundle as written, so the new page is present.
   assert.deepEqual([...(seen[0]?.paths ?? [])].sort(), ["concepts/a.md", "concepts/b.md", "index.md"]);
-  assert.equal(seen[0]?.nodes, 3);
+  assert.equal(seen[0]?.nodes, 2);
   // The hook exists so a consumer need not re-read the bundle. The apply reads the two pages
   // already on storage exactly once each; the created page is not there yet and comes from the
   // change itself. A second full pass, which is what this hook replaces, would double it.

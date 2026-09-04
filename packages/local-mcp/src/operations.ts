@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { ApplyChangeRequest, BundleAnalysis, Change, ChangePreview, ChangeResult } from "okf-contracts";
-import { listBundleEntries, searchBundle, type AnalyzeBundleOptions } from "okf-core";
+import { generateBundleIndexes, selectBundleIndex, listBundleEntries, searchBundle, type AnalyzeBundleOptions } from "okf-core";
 import type { OkfV1Operations } from "okf-contracts";
 import {
   applyChange,
@@ -64,6 +64,9 @@ export function createFilesystemOkfV1Operations(
   };
 
   return {
+    async index({ path: requested }) {
+      return { bundle, ...selectBundleIndex(generateBundleIndexes(await analyze()), requested) };
+    },
     async context() {
       let index = null;
       try {
@@ -78,6 +81,7 @@ export function createFilesystemOkfV1Operations(
         access: options.settings.access,
         instructions: await readBundleContext(options.target),
         index,
+        navigation: selectBundleIndex(generateBundleIndexes(await analyze())),
       };
     },
     async list({ path: requested, depth }) {

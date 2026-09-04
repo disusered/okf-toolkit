@@ -17,6 +17,19 @@ bundle. The library retains YAML source byte-for-byte beside its parsed mapping
 and reads Markdown links from a CommonMark AST. Conformance errors, format
 guidance, and consumer profile findings remain separate throughout the result.
 
+## Generated directory indexes
+
+`generateBundleIndexes(analysis)` returns one `okf.index.v1` navigation object
+per directory. `selectBundleIndex(indexes, directory)` selects the root (`.`)
+or a confined bundle-relative directory. Each index contains its immediate
+pages' titles and descriptions, child directories, and rendered Markdown.
+The root Markdown retains the analyzed `okf_version` declaration; nested
+indexes have no frontmatter. Neither function writes to storage.
+
+Indexes and logs are excluded from `buildGraph`. Navigation entries are not
+semantic relationships. Useful prose previously kept in a reserved `index.md`
+belongs in an ordinary typed page before an authored index is retired.
+
 ## Metadata and profile boundaries
 
 `content`, `frontmatter.raw`, and `frontmatter.yaml` retain authored bytes. The

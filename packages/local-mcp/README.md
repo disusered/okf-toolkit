@@ -55,13 +55,22 @@ bundle its own port.
 ## Access
 
 The manifest's `access` field decides what the server will do. A bundle
-declaring `read` serves the seven reading tools and refuses
+declaring `read` serves the reading tools and refuses
 `okf_v1_preview_change` and `okf_v1_apply_change`; `read-write`, or no value at
-all, serves all ten. Any other value stops the server at startup rather than
+all, serves all eleven. Any other value stops the server at startup rather than
 being guessed at.
+
+## Directory navigation
+
+Call `okf_v1_index` with `bundle` and optional `path` (`.` by default).
+It generates immediate-page and child-directory navigation from the current
+filesystem analysis. It is read-only, including on a read-only bundle, and
+reflects creates, moves, deletions, and metadata edits on the next call.
+Use `okf_v1_read` for authored content and `okf_v1_index` for generated indexes.
 
 ## Visualization
 
 `okf_v1_visualize` writes the generated page to a temporary directory and
 returns its `file:` URL, because a local client opens a file rather than a
-route this process serves.
+route this process serves. The page includes generated **Browse pages**
+navigation from the same analysis.

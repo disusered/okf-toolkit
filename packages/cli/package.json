@@ -1,6 +1,6 @@
 {
   "name": "@disusered/okf-cli",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "description": "Command line for OKF bundles, including the self-contained HTML page",
   "type": "module",
   "repository": {

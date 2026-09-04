@@ -40,6 +40,7 @@ const bundleSchema = z.object({ bundle: z.string() });
 
 export interface OkfV1Operations {
   context(): Promise<Record<string, unknown>>;
+  index(input: { readonly path: string }): Promise<Record<string, unknown>>;
   list(input: { readonly path: string; readonly depth: number }): Promise<Record<string, unknown>>;
   search(input: { readonly query: string; readonly limit: number }): Promise<Record<string, unknown>>;
   read(input: { readonly path: string }): Promise<Record<string, unknown>>;
@@ -89,6 +90,15 @@ export function createOkfV1McpServer(options: OkfV1McpOptions): McpServer {
     "okf_v1_context",
     { title: "Read OKF context", inputSchema: bundleSchema, annotations: READ_ONLY },
     async (input) => run(() => { bundleInput(input); return options.operations.context(); }),
+  );
+  server.registerTool(
+    "okf_v1_index",
+    {
+      title: "Generate directory navigation for one OKF bundle",
+      inputSchema: bundleSchema.extend({ path: z.string().default(".") }),
+      annotations: READ_ONLY,
+    },
+    async (input) => run(() => options.operations.index(bundleInput(input))),
   );
   server.registerTool(
     "okf_v1_list",

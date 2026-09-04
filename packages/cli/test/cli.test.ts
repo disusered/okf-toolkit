@@ -113,6 +113,22 @@ test("change preview and apply consume snake_case JSON from stdin", async () => 
   assert.equal(JSON.parse(replayed.stdout).outcome, "unchanged");
 });
 
+test("index is callable and regenerates descriptions without writing reserved files", async () => {
+  const root = await fixture();
+  const top = await invoke(root, ["index"]);
+  assert.equal(top.code, 0, top.stderr);
+  assert.equal(JSON.parse(top.stdout).schema, "okf.index.v1");
+  assert.deepEqual(JSON.parse(top.stdout).entries.map((entry: { path: string }) => entry.path), ["concepts"]);
+  const nested = await invoke(root, ["index", ".", "concepts"]);
+  assert.equal(nested.code, 0, nested.stderr);
+  assert.equal(JSON.parse(nested.stdout).entries[0].description, "First concept.");
+  await writeFile(path.join(root, "concepts", "alpha.md"), ALPHA.replace("First concept.", "Revised description."));
+  const revised = await invoke(root, ["index", ".", "concepts"]);
+  assert.equal(JSON.parse(revised.stdout).entries[0].description, "Revised description.");
+  assert.equal(await readFile(path.join(root, "index.md"), "utf8"), INDEX);
+  assert.equal((await invoke(root, ["index", ".", "../outside"])).code, 2);
+});
+
 test("change apply requires the exact preview id", async () => {
   const root = await fixture();
   const request = JSON.stringify({ operation: "create", path: "concepts/beta.md", content: ALPHA });

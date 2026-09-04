@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BundleAnalysis } from "okf-contracts";
-import { searchBundle, type AnalyzeBundleOptions } from "okf-core";
+import { generateBundleIndexes, selectBundleIndex, searchBundle, type AnalyzeBundleOptions } from "okf-core";
 import {
   applyChange,
   loadValidationProfile,
@@ -75,7 +75,17 @@ async function runContext(arguments_: CliArguments, io: CliIo): Promise<number> 
     schema: "okf.context.v1",
     bundle: { name: target.name },
     documents: await readBundleContext(target),
+    navigation: selectBundleIndex(generateBundleIndexes(await target.bundle.analyze(await analyzeOptions(arguments_, io)))),
   }));
+  return 0;
+}
+
+async function runIndex(arguments_: CliArguments, io: CliIo): Promise<number> {
+  const { target, rest } = await resolve(arguments_, io);
+  if (rest.length > 1) throw new Error("index accepts at most one directory after the target");
+  const analysis = await target.bundle.analyze(await analyzeOptions(arguments_, io));
+  io.stdout(stableJson({ bundle: target.name,
+    ...selectBundleIndex(generateBundleIndexes(analysis), rest[0] ?? ".") }));
   return 0;
 }
 
@@ -283,6 +293,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     }
     switch (arguments_.command) {
       case "context": return await runContext(arguments_, io);
+      case "index": return await runIndex(arguments_, io);
       case "list": return await runList(arguments_, io);
       case "search": return await runSearch(arguments_, io);
       case "read": return await runRead(arguments_, io);

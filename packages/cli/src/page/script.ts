@@ -707,7 +707,56 @@ export const PAGE_SCRIPT = String.raw`
     });
   }
 
-  var opening = graph.nodes.find(function (node) { return node.path === "index.md"; }) || graph.nodes[0];
+  function showDirectory(directory) {
+    var index = payload.indexes.find(function (candidate) { return candidate.directory === directory; });
+    var host = document.getElementById("directory-index");
+    host.replaceChildren();
+    if (!index) return;
+    var heading = document.createElement("h2");
+    heading.textContent = index.title;
+    host.appendChild(heading);
+    if (directory !== ".") {
+      var parent = document.createElement("button");
+      parent.type = "button";
+      parent.textContent = "↑ Parent";
+      parent.addEventListener("click", function () {
+        var slash = directory.lastIndexOf("/");
+        showDirectory(slash === -1 ? "." : directory.slice(0, slash));
+      });
+      host.appendChild(parent);
+    }
+    var entries = document.createElement("ul");
+    entries.className = "plain";
+    index.entries.forEach(function (entry) {
+      var item = document.createElement("li");
+      var button = document.createElement("button");
+      button.type = "button";
+      button.textContent = (entry.kind === "directory" ? "▸ " : "") + entry.title;
+      button.addEventListener("click", function () {
+        if (entry.kind === "directory") { showDirectory(entry.path); return; }
+        if (nodeById[entry.path]) { showNode(entry.path); return; }
+        var log = payload.logs.find(function (candidate) { return candidate.path === entry.path; });
+        if (log) {
+          clearSelection();
+          emptyEl.hidden = true;
+          var body = document.createElement("section");
+          renderMarkdown(log.body, body, entry.path);
+          host.appendChild(body);
+        }
+      });
+      item.appendChild(button);
+      if (entry.description) {
+        var description = document.createElement("p");
+        description.textContent = entry.description;
+        item.appendChild(description);
+      }
+      entries.appendChild(item);
+    });
+    host.appendChild(entries);
+  }
+  showDirectory(".");
+
+  var opening = graph.nodes[0];
   if (opening) { showNode(opening.id, true); }
 
   /* === dated strip and source usage bars ====================================================

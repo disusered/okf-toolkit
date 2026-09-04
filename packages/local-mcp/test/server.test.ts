@@ -28,13 +28,14 @@ test("the reported version matches the package manifest", async () => {
   assert.equal(SERVER_VERSION, manifest.version);
 });
 
-test("the ten versioned tools answer from the filesystem bundle", async () => {
+test("the versioned tools answer from the filesystem bundle", async () => {
   const { client, bundle } = await connect(PROJECT);
 
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
     "okf_v1_apply_change",
     "okf_v1_context",
+    "okf_v1_index",
     "okf_v1_inspect",
     "okf_v1_links",
     "okf_v1_list",
@@ -60,6 +61,11 @@ test("the ten versioned tools answer from the filesystem bundle", async () => {
   assert.deepEqual(context.instructions.map((document) => document.path), ["INSTRUCTIONS.md", "CONTEXT.md"]);
   assert.equal(context.index?.path, "index.md");
   assert.match(context.index?.revision ?? "", /^sha256:[0-9a-f]{64}$/);
+
+  const navigation = await callJson<{ entries: { path: string; description: string | null }[] }>(
+    client, "okf_v1_index", { bundle, path: "concepts" });
+  assert.deepEqual(navigation.entries.map((entry) => entry.path), ["concepts/alpha.md", "concepts/nested"]);
+  assert.ok(navigation.entries[0]?.description);
 
   const listed = await callJson<{ entries: { path: string; type: string }[] }>(
     client,
@@ -253,6 +259,8 @@ test("a reviewed change previews and applies against the real bundle", async () 
     { bundle, change, preview_id: preview.preview_id },
   );
   assert.equal(result.outcome, "applied");
+  const navigation = await callJson<{ entries: { path: string }[] }>(client, "okf_v1_index", { bundle, path: "concepts" });
+  assert.ok(navigation.entries.some((entry) => entry.path === "concepts/gamma.md"));
   assert.equal(
     await readFile(path.join(project, "knowledge", "concepts", "gamma.md"), "utf8"),
     GAMMA,

@@ -1,4 +1,5 @@
 import type { BundleAnalysis } from "okf-contracts";
+import { generateBundleIndexes } from "okf-core";
 import { toVisualizationGraph } from "okf-viz";
 import {
   DARK_THEME,
@@ -135,7 +136,10 @@ export function generateVisualization(input: VisualizationInput): string {
     muted: { dark: DARK_THEME.muted, light: LIGHT_THEME.muted },
     style: { dark: graphStylesheet(DARK_THEME), light: graphStylesheet(LIGHT_THEME) },
   };
-  const payload = jsonForScript({ bundle: input.bundle, encoding, evaluatedAt, graph });
+  const indexes = generateBundleIndexes(input.analysis);
+  const logs = input.analysis.documents.filter((document) => document.kind === "log")
+    .map((document) => ({ path: document.path, body: document.body }));
+  const payload = jsonForScript({ bundle: input.bundle, encoding, evaluatedAt, graph, indexes, logs });
   const title = escapeText(`${input.bundle} — OKF graph`);
 
   return `<!DOCTYPE html>
@@ -185,6 +189,10 @@ export function generateVisualization(input: VisualizationInput): string {
   <section id="graph" aria-label="Bundle graph"></section>
   <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize" tabindex="0"></div>
   <aside id="detail">
+    <details id="navigation" open>
+      <summary>Browse pages</summary>
+      <nav id="directory-index" aria-label="Directory navigation"></nav>
+    </details>
     <p id="detail-empty" class="empty">Select a page in the graph.</p>
     <article id="detail-content" hidden>
       <span class="chip" id="detail-type"></span>
