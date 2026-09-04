@@ -1,5 +1,12 @@
 import type { BundleAnalysis } from "okf-contracts";
 import { toVisualizationGraph } from "okf-viz";
+import {
+  DARK_THEME,
+  graphStylesheet,
+  layoutOptions,
+  LIGHT_THEME,
+  nodeClasses,
+} from "okf-viz/browser";
 
 import { PAGE_SCRIPT } from "./page/script.js";
 import { PAGE_STYLE } from "./page/style.js";
@@ -112,7 +119,23 @@ export function generateVisualization(input: VisualizationInput): string {
   }
 
   const graph = toVisualizationGraph(input.analysis);
-  const payload = jsonForScript({ bundle: input.bundle, evaluatedAt, graph });
+  /*
+   * The graph's encoding comes from `okf-viz`, computed here and applied by the page.
+   *
+   * The page used to build the Cytoscape stylesheet and the node classes itself, which meant
+   * two implementations of what a node looks like and no way to keep them agreeing. Both are
+   * plain data, and this runs in Node, so the library decides and the page obeys.
+   *
+   * Two stylesheets travel with the page because the authorship ring is chosen at view time,
+   * not here: a near-black ring is invisible on a dark background.
+   */
+  const encoding = {
+    classes: Object.fromEntries(graph.nodes.map((node) => [node.id, nodeClasses(node)])),
+    layout: layoutOptions("cose"),
+    muted: { dark: DARK_THEME.muted, light: LIGHT_THEME.muted },
+    style: { dark: graphStylesheet(DARK_THEME), light: graphStylesheet(LIGHT_THEME) },
+  };
+  const payload = jsonForScript({ bundle: input.bundle, encoding, evaluatedAt, graph });
   const title = escapeText(`${input.bundle} — OKF graph`);
 
   return `<!DOCTYPE html>

@@ -127,29 +127,17 @@ export const PAGE_SCRIPT = String.raw`
     }).run();
   }
 
+  // The encoding is okf-viz's, computed when the page was generated and applied here. Two
+  // stylesheets travel with the page because the authorship ring is chosen at view time: a
+  // near-black ring is invisible on a dark background, and that ring is a signal that must
+  // always read. Neither the rules nor the node classes are decided in this file any more,
+  // so the graph is drawn one way by one implementation.
   var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  var MUTED = dark ? "#94a3b8" : "#64748b";
-  // Ring and warning colours are chosen at view time, not build time: a near-black ring is
-  // invisible on a dark background, and the authorship ring is a signal that must always read.
-  var RING = dark ? "#e2e8f0" : "#0f172a";
-  var STALE = dark ? "#f87171" : "#b91c1c";
-  var ATTESTED = dark ? "#c4b5fd" : "#6d28d9";
+  var MUTED = dark ? payload.encoding.muted.dark : payload.encoding.muted.light;
 
   var cy = cytoscape({
     container: document.getElementById("graph"),
     elements: graph.nodes.map(function (node) {
-      // Four channels, each carrying one thing: fill and shape are the type, the border is who
-      // wrote the page, and opacity is whether a person ever checked it. The reader's metadata
-      // table still spells all of it out, because a graph cannot carry a key.
-      var classes = ["author-" + node.authorKind];
-      if (node.pending) {
-        classes.push("pending");
-      } else {
-        // The tier is derived by okf-core; anything short of human-reviewed is a weaker claim.
-        if (node.trustTier !== "human-reviewed") { classes.push("unchecked"); }
-        if (node.status === "deprecated") { classes.push("deprecated"); }
-        if (node.stale === true) { classes.push("stale"); }
-      }
       return {
         data: {
           id: node.id,
@@ -158,7 +146,7 @@ export const PAGE_SCRIPT = String.raw`
           size: node.size,
           shape: node.shape
         },
-        classes: classes.join(" ")
+        classes: (payload.encoding.classes[node.id] || []).join(" ")
       };
     }).concat(graph.edges.map(function (edge) {
       return {
@@ -166,86 +154,9 @@ export const PAGE_SCRIPT = String.raw`
         classes: edge.attested ? "attested" : ""
       };
     })),
-    style: [
-      {
-        selector: "node",
-        style: {
-          "background-color": "data(color)",
-          "label": "data(label)",
-          "color": MUTED,
-          "font-size": 10,
-          "text-valign": "bottom",
-          "text-margin-y": 5,
-          "text-wrap": "wrap",
-          "text-max-width": 110,
-          "text-overflow-wrap": "anywhere",
-          "text-background-color": dark ? "#0b1120" : "#f8fafc",
-          "text-background-opacity": 0.85,
-          "text-background-padding": 2,
-          "shape": "data(shape)",
-          "width": "data(size)",
-          "height": "data(size)"
-        }
-      },
-      // Border style is the authorship channel, so it stays independent of fill and shape: a
-      // solid ring for a person, dashes for an agent, a doubled ring for an automated process,
-      // and no ring at all when nothing was recorded. Absence must look like absence.
-      { selector: "node.author-human", style: { "border-width": 3, "border-style": "solid", "border-color": RING } },
-      { selector: "node.author-agent", style: { "border-width": 3, "border-style": "dashed", "border-color": RING } },
-      { selector: "node.author-process", style: { "border-width": 4, "border-style": "double", "border-color": RING } },
-      { selector: "node.author-unknown", style: { "border-width": 0 } },
-      // No person has checked it, or it has been retired: draw it as the weaker claim it is.
-      { selector: "node.unchecked", style: { "opacity": 0.55 } },
-      { selector: "node.deprecated", style: { "opacity": 0.45 } },
-      // Stale is louder than either fade, on purpose, and so it must sit after both: a page that
-      // has passed its own date is a warning rather than a footnote. Only the colour changes, so
-      // the border still says who wrote it.
-      { selector: "node.stale", style: { "opacity": 1, "border-width": 5, "border-color": STALE } },
-      { selector: "node.pending", style: { "opacity": 0.5, "border-width": 1, "border-style": "dotted", "border-color": "#94a3b8" } },
-      { selector: "node:selected", style: { "border-width": 4, "border-color": "#b45309" } },
-      {
-        selector: "edge",
-        style: {
-          "width": 1.4,
-          "line-color": "#cbd5e1",
-          "target-arrow-color": "#cbd5e1",
-          "target-arrow-shape": "triangle",
-          "curve-style": "bezier",
-          "arrow-scale": 0.8
-        }
-      },
-      { selector: 'edge[relation = "source"]', style: { "line-style": "dashed" } },
-      { selector: 'edge[relation = "pending"]', style: { "line-style": "dotted", "opacity": 0.6 } },
-      // An edge into an Attested Computation is drawn as its own thing, so a reader can trace
-      // which pages rest on a sanctioned run rather than on prose. It comes after the relation
-      // rules because leaning on a computation outranks how the reference was written.
-      {
-        selector: "edge.attested",
-        style: {
-          "width": 2.6,
-          "line-style": "solid",
-          "line-color": ATTESTED,
-          "target-arrow-color": ATTESTED,
-          "target-arrow-shape": "triangle-backcurve",
-          "arrow-scale": 1.1,
-          "opacity": 1
-        }
-      },
-      { selector: "edge:selected", style: { "line-color": "#b45309", "target-arrow-color": "#b45309", "width": 2.4 } },
-      { selector: ".dim", style: { "opacity": 0.12 } }
-    ],
+    style: dark ? payload.encoding.style.dark : payload.encoding.style.light,
     // Labels sit below their node, so the default packing overlaps them. Give the layout room.
-    layout: {
-      name: "cose",
-      animate: false,
-      padding: 36,
-      nodeRepulsion: 6000,
-      idealEdgeLength: 100,
-      componentSpacing: 80,
-      nodeOverlap: 20
-      // No stop hook here: it would fire during construction, before the cy variable is
-      // assigned, and the throw would abort the rest of this script. cose fits on its own.
-    }
+    layout: payload.encoding.layout
   });
 
   // Layout preferences live in localStorage, keyed generically so the page carries no origin.
