@@ -1,5 +1,6 @@
 import type {
   ApplyChangeRequest,
+  BundleAnalysis,
   Change,
   ChangePreview,
   ChangeResult,
@@ -40,6 +41,18 @@ export interface R2OkfV1OperationsOptions {
     | readonly OkfContextDocument[]
     | (() => Promise<readonly OkfContextDocument[]>);
   readonly visualizationUrl?: string | null;
+  /**
+   * Called after a change reaches storage, with the analysis of the bundle as written.
+   *
+   * A consumer that derives something from the whole bundle after a write — a generated view,
+   * say — would otherwise have to list and analyse it a second time, doubling the work of an
+   * apply inside one invocation. The analysis passed here is the one the apply already
+   * computed to validate the change, so reusing it is free.
+   *
+   * It is awaited inside the request, and a throw propagates: a consumer whose own policy is
+   * that a derived artifact must never fail a write that already succeeded handles that here.
+   */
+  readonly onApplied?: (analysis: BundleAnalysis) => Promise<void> | void;
 }
 
 /** Read explicitly configured instruction objects without widening the authored bundle adapter. */
@@ -194,23 +207,32 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
     return analyzeBundle(listing.documents, withFiles(listing));
   };
 
-  const previewFromDocuments = async (
+  /** The preview plus the analysis behind it, so an apply need not compute it twice. */
+  const checkChange = async (
     change: Change,
     listing: R2BundleListing,
-  ): Promise<ChangePreview> => {
+  ): Promise<{ readonly preview: ChangePreview; readonly analysis: BundleAnalysis }> => {
     const proposed = proposedDocuments(listing.documents, change);
     const analysis = analyzeBundle(proposed.documents, withFiles(listing));
     const diagnostics = [...proposed.diagnostics, ...allDiagnostics(analysis)];
     return {
-      schema: OPERATIONS_SCHEMA,
-      passed: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
-      preview_id: await changePreviewId(change),
-      operation: change.operation,
-      affected_paths: affectedPaths(change),
-      diff: proposed.diff,
-      diagnostics,
+      analysis,
+      preview: {
+        schema: OPERATIONS_SCHEMA,
+        passed: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
+        preview_id: await changePreviewId(change),
+        operation: change.operation,
+        affected_paths: affectedPaths(change),
+        diff: proposed.diff,
+        diagnostics,
+      },
     };
   };
+
+  const previewFromDocuments = async (
+    change: Change,
+    listing: R2BundleListing,
+  ): Promise<ChangePreview> => (await checkChange(change, listing)).preview;
 
   const preview = async (input: Change): Promise<ChangePreview> => {
     const change = parseChange(input);
@@ -364,16 +386,19 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
             )]);
           }
           const desired = current.filter((document) => document.path !== change.from_path);
-          const diagnostics = allDiagnostics(analyzeBundle(desired, withFiles(listing)));
+          const moved = analyzeBundle(desired, withFiles(listing));
+          const diagnostics = allDiagnostics(moved);
           if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
             return rejected(change, diagnostics);
           }
           try {
+            const revisions = await options.adapter.applyStorageChange(change, expectedPreviewId);
+            await options.onApplied?.(moved);
             return {
               schema: OPERATIONS_SCHEMA,
               outcome: "applied",
               operation: change.operation,
-              revisions: await options.adapter.applyStorageChange(change, expectedPreviewId),
+              revisions,
               diagnostics,
             };
           } catch (error) {
@@ -386,16 +411,18 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
         }
       }
 
-      const checked = await previewFromDocuments(change, listing);
+      const { preview: checked, analysis } = await checkChange(change, listing);
       if (!checked.passed) {
         return rejected(change, checked.diagnostics);
       }
       try {
+        const revisions = await options.adapter.applyStorageChange(change, expectedPreviewId);
+        await options.onApplied?.(analysis);
         return {
           schema: OPERATIONS_SCHEMA,
           outcome: "applied",
           operation: change.operation,
-          revisions: await options.adapter.applyStorageChange(change, expectedPreviewId),
+          revisions,
           diagnostics: checked.diagnostics,
         };
       } catch (error) {

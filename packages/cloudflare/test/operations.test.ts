@@ -95,6 +95,59 @@ test("preview and apply revalidate a full snapshot", async () => {
   assert.equal(objects.get("shared/concepts/b.md")?.body, SECOND);
 });
 
+test("onApplied receives the written bundle without listing it again", async () => {
+  const { bucket, reads } = memoryBucket({
+    "shared/index.md": INDEX,
+    "shared/concepts/a.md": CONCEPT,
+  });
+  const adapter = new R2BundleAdapter(bucket, { bundle: "shared", prefix: "shared" });
+  const seen: { paths: readonly string[]; nodes: number }[] = [];
+  const operations = createR2OkfV1Operations({
+    adapter,
+    onApplied: (analysis) => {
+      seen.push({
+        paths: analysis.documents.map((document) => document.path),
+        nodes: analysis.graph.nodes.length,
+      });
+    },
+  });
+
+  const change: Change = { operation: "create", path: "concepts/b.md", content: SECOND };
+  const preview = await operations.previewChange(change);
+  const before = reads.length;
+  const result = await operations.applyChange({ change, preview_id: preview.preview_id });
+
+  assert.equal(result.outcome, "applied");
+  assert.equal(seen.length, 1);
+  // The analysis is of the bundle as written, so the new page is present.
+  assert.deepEqual([...(seen[0]?.paths ?? [])].sort(), ["concepts/a.md", "concepts/b.md", "index.md"]);
+  assert.equal(seen[0]?.nodes, 3);
+  // The hook exists so a consumer need not re-read the bundle. The apply reads the two pages
+  // already on storage exactly once each; the created page is not there yet and comes from the
+  // change itself. A second full pass, which is what this hook replaces, would double it.
+  const readsDuringApply = reads.length - before;
+  assert.equal(readsDuringApply, 2, "an apply reads each stored document exactly once");
+});
+
+test("onApplied does not fire when a change is rejected or changes nothing", async () => {
+  const { bucket } = memoryBucket({
+    "shared/index.md": INDEX,
+    "shared/concepts/a.md": CONCEPT,
+  });
+  const adapter = new R2BundleAdapter(bucket, { bundle: "shared", prefix: "shared" });
+  let calls = 0;
+  const operations = createR2OkfV1Operations({ adapter, onApplied: () => { calls += 1; } });
+
+  const change: Change = { operation: "create", path: "concepts/a.md", content: CONCEPT };
+  const preview = await operations.previewChange(change);
+  assert.equal((await operations.applyChange({ change, preview_id: preview.preview_id })).outcome, "unchanged");
+  assert.equal(calls, 0);
+
+  const rejectedResult = await operations.applyChange({ change, preview_id: "sha256:not-the-preview" });
+  assert.equal(rejectedResult.outcome, "rejected");
+  assert.equal(calls, 0);
+});
+
 test("profile errors and stale revisions reject without storage writes", async () => {
   const { bucket, writes } = memoryBucket({
     "shared/index.md": INDEX,

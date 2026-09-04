@@ -16,6 +16,8 @@ interface Stored {
 export function memoryBucket(seed: Readonly<Record<string, string>> = {}) {
   const objects = new Map<string, Stored>();
   const writes: { key: string; body: string; contentType?: string }[] = [];
+  /** Every object body fetched, so a test can assert an operation reads the bundle once. */
+  const reads: string[] = [];
   let revision = 0;
   const next = () => `etag-${revision += 1}`;
   for (const [key, body] of Object.entries(seed)) objects.set(key, { body, etag: next() });
@@ -24,6 +26,7 @@ export function memoryBucket(seed: Readonly<Record<string, string>> = {}) {
     async get(key): Promise<R2ObjectBodyLike | null> {
       const object = objects.get(key);
       if (!object) return null;
+      reads.push(key);
       return {
         key,
         etag: object.etag,
@@ -74,7 +77,7 @@ export function memoryBucket(seed: Readonly<Record<string, string>> = {}) {
       objects.delete(key);
     },
   };
-  return { bucket, objects, writes };
+  return { bucket, objects, writes, reads };
 }
 
 export function queueBatch(...keys: string[]) {
