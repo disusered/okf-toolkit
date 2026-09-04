@@ -1,44 +1,22 @@
+import { diffArrays } from "diff";
+
+/**
+ * Line ceiling for a diff. Myers needs memory proportional to the two inputs plus the size of
+ * the difference, not to their product, so this is a sanity bound on absurd input rather than
+ * the memory cliff it used to guard: the previous implementation filled an (n+1) x (m+1) table
+ * of doubles, which at this very bound measured 190 MB against a 128 MB Cloudflare isolate.
+ */
 const MAX_LINES = 5_000;
 const CONTEXT = 3;
 
-function commonSubsequence(before: readonly string[], after: readonly string[]): number[][] {
-  const table: number[][] = Array.from({ length: before.length + 1 }, () =>
-    new Array<number>(after.length + 1).fill(0),
-  );
-  for (let i = before.length - 1; i >= 0; i -= 1) {
-    for (let j = after.length - 1; j >= 0; j -= 1) {
-      const row = table[i]!;
-      row[j] =
-        before[i] === after[j]
-          ? (table[i + 1]![j + 1] ?? 0) + 1
-          : Math.max(table[i + 1]![j] ?? 0, row[j + 1] ?? 0);
-    }
-  }
-  return table;
-}
-
 type Operation = { readonly sign: " " | "-" | "+"; readonly text: string };
 
-function operations(before: readonly string[], after: readonly string[]): Operation[] {
-  const table = commonSubsequence(before, after);
+function operations(before: string[], after: string[]): Operation[] {
   const result: Operation[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < before.length && j < after.length) {
-    if (before[i] === after[j]) {
-      result.push({ sign: " ", text: before[i]! });
-      i += 1;
-      j += 1;
-    } else if ((table[i + 1]![j] ?? 0) >= (table[i]![j + 1] ?? 0)) {
-      result.push({ sign: "-", text: before[i]! });
-      i += 1;
-    } else {
-      result.push({ sign: "+", text: after[j]! });
-      j += 1;
-    }
+  for (const part of diffArrays(before, after)) {
+    const sign = part.added ? "+" : part.removed ? "-" : " ";
+    for (const text of part.value) result.push({ sign, text: text ?? "" });
   }
-  for (; i < before.length; i += 1) result.push({ sign: "-", text: before[i]! });
-  for (; j < after.length; j += 1) result.push({ sign: "+", text: after[j]! });
   return result;
 }
 

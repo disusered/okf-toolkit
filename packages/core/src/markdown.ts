@@ -24,18 +24,39 @@ function nodeText(node: MdastNode): string {
   return (node.children ?? []).map(nodeText).join("");
 }
 
+/**
+ * A parsed CommonMark tree.
+ *
+ * Parsing dominates the cost of analysing a bundle, so a caller that needs more than one thing
+ * from the same body parses once with `parseMarkdown` and passes the tree to the `*FromRoot`
+ * functions. The string-taking wrappers remain for callers that only need one answer.
+ */
+export type MarkdownRoot = ReturnType<typeof fromMarkdown>;
+
+export function parseMarkdown(markdown: string): MarkdownRoot {
+  return fromMarkdown(markdown);
+}
+
 /** Return actual top-level CommonMark blocks, excluding syntax nested in code. */
-export function markdownBlocks(markdown: string): readonly MarkdownBlock[] {
-  const root: MdastNode = fromMarkdown(markdown);
-  return (root.children ?? []).map((node): MarkdownBlock => {
-    if (node.type === "heading" && typeof node.depth === "number") {
-      return { type: "heading", depth: node.depth, text: nodeText(node) };
+export function blocksFromRoot(root: MarkdownRoot): readonly MarkdownBlock[] {
+  const node: MdastNode = root;
+  return (node.children ?? []).map((child): MarkdownBlock => {
+    if (child.type === "heading" && typeof child.depth === "number") {
+      return { type: "heading", depth: child.depth, text: nodeText(child) };
     }
-    return node.type === "list" ? { type: "list" } : { type: "other" };
+    return child.type === "list" ? { type: "list" } : { type: "other" };
   });
 }
 
 /** Return actual CommonMark heading blocks, excluding fenced and indented code. */
+export function headingsFromRoot(root: MarkdownRoot): readonly MarkdownHeading[] {
+  return blocksFromRoot(root).flatMap((block) => (block.type === "heading" ? [block] : []));
+}
+
+export function markdownBlocks(markdown: string): readonly MarkdownBlock[] {
+  return blocksFromRoot(parseMarkdown(markdown));
+}
+
 export function markdownHeadings(markdown: string): readonly MarkdownHeading[] {
-  return markdownBlocks(markdown).flatMap((block) => block.type === "heading" ? [block] : []);
+  return headingsFromRoot(parseMarkdown(markdown));
 }

@@ -12,7 +12,8 @@ import { compareDiagnostics, diagnostic } from "./diagnostics.js";
 import { deriveDocumentFields, validDate } from "./derive.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { buildGraph } from "./graph.js";
-import { extractMarkdownLinks } from "./links.js";
+import { linksFromRoot } from "./links.js";
+import { parseMarkdown } from "./markdown.js";
 import { byCodePoint } from "./paths.js";
 import type {
   AnalyzeBundleOptions,
@@ -179,7 +180,10 @@ export function parseBundleDocument(
   const knownPaths = options.knownPaths ?? new Set([raw.path]);
   const nonDocumentPaths = options.nonDocumentPaths ?? NO_PATHS;
   const today = options.today ?? null;
-  const links = extractMarkdownLinks(parsed.body, {
+  // One parse per document, shared by link extraction, title derivation and the index and log
+  // conformance checks. Each of those used to parse the same body again.
+  const tree = parseMarkdown(parsed.body);
+  const links = linksFromRoot(tree, {
     sourcePath: raw.path,
     knownPaths,
     lineOffset: parsed.bodyStartLine - 1,
@@ -187,7 +191,7 @@ export function parseBundleDocument(
   });
   const { derived, guidance } = deriveDocumentFields(
     metadata,
-    parsed.body,
+    tree,
     raw.path,
     knownPaths,
     nonDocumentPaths,
@@ -209,7 +213,7 @@ export function parseBundleDocument(
   return {
     document,
     diagnostics: {
-      core: [...coreDiagnostics(raw.path, kind, parsed)].sort(compareDiagnostics),
+      core: [...coreDiagnostics(raw.path, kind, parsed, tree)].sort(compareDiagnostics),
       guidance: [...guidance, ...linkGuidance(document)].sort(compareDiagnostics),
     },
   };

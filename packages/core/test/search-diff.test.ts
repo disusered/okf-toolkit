@@ -49,3 +49,37 @@ test("unified diff preserves the established wire form", () => {
   assert.equal(unifiedDiff("one\ntwo\n", "one\nthree\n", "page.md"), "--- a/page.md\n+++ b/page.md\n one\n-two\n+three\n \n");
   assert.equal(unifiedDiff("same", "same", "page.md"), "");
 });
+
+test("unified diff elides unchanged runs and keeps three lines of context", () => {
+  const before = Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n");
+  const after = before.replace("line 10", "line 10 edited");
+  const diff = unifiedDiff(before, after, "page.md");
+  assert.match(diff, /^--- a\/page\.md\n\+\+\+ b\/page\.md\n@@\n/);
+  assert.match(diff, /-line 10\n\+line 10 edited\n/);
+  // Three lines either side survive; the distant ones are elided into a single marker.
+  for (const kept of [" line 7", " line 9", " line 11", " line 13"]) assert.ok(diff.includes(`${kept}\n`));
+  for (const dropped of [" line 0", " line 19"]) assert.ok(!diff.includes(`${dropped}\n`));
+});
+
+test("a one-line edit in a long page costs memory proportional to the edit", () => {
+  // Regression guard. This diff was computed by filling an (n+1) x (m+1) table of doubles,
+  // which at 4,900 lines allocated ~190 MB and killed a 128 MB Cloudflare isolate outright.
+  // Myers needs memory proportional to the difference, so the same input is now under a
+  // megabyte. The ceiling here is deliberately far below the old cost and far above the new.
+  const before = Array.from({ length: 4_900 }, (_, i) => `line ${i} of a long authored page`).join("\n");
+  const after = before.replace("line 2450 of", "line 2450 edited of");
+  globalThis.gc?.();
+  const baseline = process.memoryUsage().heapUsed;
+  const diff = unifiedDiff(before, after, "page.md");
+  const grew = (process.memoryUsage().heapUsed - baseline) / 1_048_576;
+  assert.match(diff, /-line 2450 of a long authored page\n\+line 2450 edited of a long authored page\n/);
+  assert.ok(grew < 32, `a one-line edit in a 4,900-line page allocated ${grew.toFixed(1)} MB`);
+});
+
+test("unified diff refuses input beyond its line ceiling", () => {
+  const huge = Array.from({ length: 5_001 }, (_, i) => `line ${i}`).join("\n");
+  assert.equal(
+    unifiedDiff(huge, `${huge}\nmore`, "page.md"),
+    "--- a/page.md\n+++ b/page.md\n@@ file too large to diff @@\n",
+  );
+});

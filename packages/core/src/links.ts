@@ -2,6 +2,7 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 
 import type { AnalyzedLink, SourceRange } from "okf-contracts";
 
+import type { MarkdownRoot } from "./markdown.js";
 import { resolveWithinBundle } from "./paths.js";
 
 interface MdastPoint {
@@ -73,7 +74,18 @@ export function extractMarkdownLinks(
   markdown: string,
   options: ExtractLinksOptions,
 ): readonly AnalyzedLink[] {
-  const root: MdastNode = fromMarkdown(markdown);
+  return linksFromRoot(fromMarkdown(markdown), options);
+}
+
+/**
+ * The same extraction over a tree the caller already parsed. Analysing a document needs links
+ * and headings from one body, and parsing it twice was more than a quarter of the cost.
+ */
+export function linksFromRoot(
+  parsed: MarkdownRoot,
+  options: ExtractLinksOptions,
+): readonly AnalyzedLink[] {
+  const root: MdastNode = parsed;
   const definitions = new Map<string, string>();
 
   const collectDefinitions = (node: MdastNode): void => {
