@@ -35,11 +35,18 @@ Four channels, each carrying one fact, so a reader can tell them apart:
 handle for selecting, focusing, dimming and fitting it.
 
 ```ts
+import cytoscape from "cytoscape";
 import { mountGraph } from "okf-viz/browser";
 
-const handle = mountGraph(document.getElementById("graph"), graph);
+const handle = mountGraph(document.getElementById("graph"), graph, { cytoscape });
 handle.select("concepts/example.md");
 ```
+
+The handle covers what a reader does to a graph: `select` one node, `setDimmed` to fade
+everything a predicate rejects, `runLayout`, `fit` the whole graph, and `frame` a set of
+nodes so the view shows exactly those. `frame` is what a focus mode needs — having decided
+which pages matter, show those and no more. Ids the graph does not carry are ignored, and an
+empty set leaves the camera alone rather than fitting nothing.
 
 Cytoscape is a **peer dependency**. This package does not bundle it, so a
 consumer picks the version, dedupes it, and reaches the same `cy` instance the

@@ -10,6 +10,8 @@ export interface CytoscapeLike {
 export interface CytoscapeCore {
   on(event: string, selectorOrHandler: unknown, handler?: unknown): void;
   elements(): CytoscapeCollection;
+  /** Cytoscape's own predicate filter, which is how a subset becomes a collection to fit. */
+  filter(match: (element: CytoscapeCollection) => boolean): CytoscapeCollection;
   getElementById(id: string): CytoscapeCollection;
   layout(options: Record<string, unknown>): { run(): void };
   resize(): void;
@@ -54,6 +56,14 @@ export interface GraphHandle {
   runLayout(name: LayoutName): void;
   /** Resize, fit, and ease the zoom back so labels drawn below a node stay on screen. */
   fit(): void;
+  /**
+   * Frame a set of nodes, so the view shows exactly them.
+   *
+   * What a focus mode needs: having decided which pages matter, the camera should show those
+   * and no more. Ids the graph does not carry are ignored, and an empty or wholly unknown set
+   * leaves the camera alone rather than fitting nothing.
+   */
+  frame(ids: Iterable<string>, padding?: number): void;
   onSelect(listener: (id: string) => void): void;
   onBackground(listener: () => void): void;
   onHover(listener: (node: VisualizationNode | null, at: { x: number; y: number }) => void): void;
@@ -125,6 +135,14 @@ export function mountGraph(
       cy.destroy();
     },
     fit,
+    frame(ids, padding = 90) {
+      const wanted = new Set(ids);
+      if (wanted.size === 0) return;
+      const elements = cy.filter((element) => wanted.has(element.id()));
+      if (elements.length === 0) return;
+      cy.resize();
+      cy.fit(elements, padding);
+    },
     onBackground(listener) {
       cy.on("tap", (event: { target: unknown }) => {
         if (event.target === cy) listener();
