@@ -17,6 +17,7 @@ export function layoutOptions(name: LayoutName): Record<string, unknown> {
   return {
     name,
     animate: false,
+    nodeDimensionsIncludeLabels: true,
     padding: 36,
     nodeRepulsion: 6000,
     idealEdgeLength: 100,

@@ -22,10 +22,13 @@ test("versioned identifiers are stable", () => {
 test("published schemas and fixtures carry their expected identifiers", async () => {
   const inspect = await json("../../schemas/okf.inspect.v1.schema.json");
   const operations = await json("../../schemas/okf.operations.v1.schema.json");
+  const index = await json("../../schemas/okf.index.v1.schema.json");
   const fixture = await json("../../fixtures/conformance/valid-v0.2.json");
 
   assert.equal(inspect["$id"], "https://okf.md/schemas/okf.inspect.v1.schema.json");
   assert.equal(operations["$id"], "https://okf.md/schemas/okf.operations.v1.schema.json");
+  assert.equal(index["$id"], "https://okf.md/schemas/okf.index.v1.schema.json");
+  assert.equal(index["additionalProperties"], false);
   assert.equal(fixture["today"], "2026-08-20");
 });
 

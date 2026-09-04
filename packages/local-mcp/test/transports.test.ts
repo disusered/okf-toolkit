@@ -38,7 +38,7 @@ test("a real client drives the installed binary over stdio", async () => {
       arguments: { bundle: "fixture", path: "index.md" },
     }) as { content: { text?: string }[] };
 
-    assert.equal(tools.length, 10);
+    assert.equal(tools.length, 11);
     assert.match(String(result.content[0]?.text), /# Fixture bundle/);
     assert.match(notes.read(), /okf-mcp: serving bundle fixture \(read-write\) from .*knowledge over stdio/);
   } finally {
@@ -104,7 +104,7 @@ test("loopback HTTP serves the versioned path and refuses a foreign origin", asy
     const client = new Client({ name: "okf-mcp-http-test", version: "1" });
     await client.connect(new StreamableHTTPClientTransport(new URL(handle.url)));
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 10);
+    assert.equal(tools.length, 11);
     await client.close();
 
     const foreign = await fetch(handle.url, {

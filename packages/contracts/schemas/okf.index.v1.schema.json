@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://okf.md/schemas/okf.index.v1.schema.json",
+  "title": "Generated OKF directory index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated", "directory", "path", "title", "entries", "content"],
+  "properties": {
+    "schema": { "const": "okf.index.v1" },
+    "bundle": { "type": ["string", "null"] },
+    "generated": { "const": true },
+    "directory": { "type": "string" },
+    "path": { "type": "string" },
+    "title": { "type": "string" },
+    "content": { "type": "string" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "path", "href", "title", "description"],
+        "properties": {
+          "kind": { "enum": ["directory", "document"] },
+          "path": { "type": "string" },
+          "href": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

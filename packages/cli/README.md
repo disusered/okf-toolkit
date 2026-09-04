@@ -9,6 +9,8 @@ okf inspect docs --json
 okf validate docs --strict
 okf search docs "box office"
 okf read docs concepts/settlement.md
+okf index docs
+okf index docs concepts
 okf visualize docs --out .okf/viz.html
 okf watch docs --out .okf/viz.html
 ```
@@ -16,6 +18,17 @@ okf watch docs --out .okf/viz.html
 When a target is a repository rather than a bundle root, discovery uses only
 `.agents/okf.yaml`. Use `--bundle NAME` when the manifest declares more than one
 bundle.
+
+## Directory navigation
+
+`okf index [target] [directory]` emits `okf.index.v1` JSON, including generated
+Markdown in `content`. Omit the directory for the root. It reads current titles
+and descriptions on every invocation and never overwrites authored files.
+
+`okf visualize` embeds the same indexes in the reader's **Browse pages** panel.
+`okf watch` regenerates them with the viewer whenever Markdown changes. After
+a CLI change, call `index` for current navigation or use `watch` for a saved
+viewer that updates automatically.
 
 ## Change operations
 

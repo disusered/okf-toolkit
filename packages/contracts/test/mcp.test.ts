@@ -10,6 +10,7 @@ import { createOkfV1McpServer, type OkfV1Operations } from "../src/mcp.js";
 function operations(calls: string[]): OkfV1Operations {
   return {
     async context() { calls.push("context"); return { bundle: "shared" }; },
+    async index(input) { calls.push(`index:${input.path}`); return { schema: "okf.index.v1", entries: [] }; },
     async list(input) { calls.push(`list:${input.path}:${input.depth}`); return { entries: [] }; },
     async search(input) { calls.push(`search:${input.query}:${input.limit}`); return { matches: [] }; },
     async read(input) { calls.push(`read:${input.path}`); return { path: input.path, content: "# A" }; },
@@ -63,6 +64,7 @@ test("the MCP surface is explicitly versioned", async () => {
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
     "okf_v1_apply_change",
     "okf_v1_context",
+    "okf_v1_index",
     "okf_v1_inspect",
     "okf_v1_links",
     "okf_v1_list",
@@ -83,6 +85,15 @@ test("each operation refuses any bundle except the deployment bundle", async () 
   assert.equal((result as { isError?: boolean }).isError, true);
   assert.match(String((result as { content: { text: string }[] }).content[0]?.text), /unknown bundle/);
   assert.deepEqual(calls, []);
+});
+
+test("index defaults to the root, accepts a directory, and refuses another bundle", async () => {
+  const { client, calls } = await connected();
+  await client.callTool({ name: "okf_v1_index", arguments: { bundle: "shared" } });
+  await client.callTool({ name: "okf_v1_index", arguments: { bundle: "shared", path: "guides" } });
+  const refused = await client.callTool({ name: "okf_v1_index", arguments: { bundle: "private" } });
+  assert.equal(refused.isError, true);
+  assert.deepEqual(calls, ["index:.", "index:guides"]);
 });
 
 test("change operations preserve the discriminated change contract", async () => {

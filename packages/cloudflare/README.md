@@ -1,5 +1,18 @@
 # okf-cloudflare
 
+## Generated directory navigation
+
+`createR2OkfV1Operations` exposes `okf_v1_index({ bundle, path: "." })`.
+By default it generates navigation from live bundle analysis. Consumers that
+precompute views can provide `indexes: async () => storedIndexesOrNull` to
+serve a generated snapshot; `null` falls back to live analysis.
+
+In `onApplied`, call `generateBundleIndexes(analysis)` from `okf-core` and
+persist the result outside the authored prefix. Reuse that same snapshot in
+the reader payload. Explicit rebuilds must call the generator too, using the
+documents already loaded. Generated navigation never becomes authored content
+or semantic graph edges. The consumer owns regeneration and failure reporting.
+
 Use this package to run exactly one OKF Bundle on Cloudflare. It provides an R2
 adapter, the versioned `okf_v1_*` MCP operations, hooks for Cloudflare Access
 and authorization, and a Queue consumer that safely handles repeated delivery

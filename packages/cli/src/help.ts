@@ -5,6 +5,7 @@ default. Use --json to state that contract explicitly.
 
 Commands:
   context [target]                 Read manifest-scoped instructions
+  index [target] [directory]        Generate immediate-page and child-directory navigation
   list [target]                    List analyzed Markdown documents
   search [target] <query...>       Search one bundle
   read [target] <path>             Read one analyzed document

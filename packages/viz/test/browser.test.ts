@@ -106,6 +106,7 @@ test("layout options give labels room and never animate", () => {
   assert.equal(options["name"], "cose");
   // Labels sit below their node, so the default packing overlaps them.
   assert.equal(options["animate"], false);
+  assert.equal(options["nodeDimensionsIncludeLabels"], true);
   assert.equal(options["nodeRepulsion"], 6000);
   assert.equal(options["idealEdgeLength"], 100);
   assert.equal(options["padding"], 36);

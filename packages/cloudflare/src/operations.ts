@@ -1,6 +1,7 @@
 import type {
   ApplyChangeRequest,
   BundleAnalysis,
+  BundleDirectoryIndex,
   Change,
   ChangePreview,
   ChangeResult,
@@ -12,6 +13,8 @@ import { OPERATIONS_SCHEMA } from "okf-contracts";
 import {
   analyzeBundle,
   canonicalChangeJson,
+  generateBundleIndexes,
+  selectBundleIndex,
   listBundleEntries,
   parseChange,
   searchBundle,
@@ -41,6 +44,8 @@ export interface R2OkfV1OperationsOptions {
     | readonly OkfContextDocument[]
     | (() => Promise<readonly OkfContextDocument[]>);
   readonly visualizationUrl?: string | null;
+  /** Optional generated snapshot outside the authored prefix; null falls back to live analysis. */
+  readonly indexes?: () => Promise<readonly BundleDirectoryIndex[] | null>;
   /**
    * Called after a change reaches storage, with the bundle as written.
    *
@@ -275,6 +280,9 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
     diagnostics: allDiagnostics(analyzeBundle(listing.documents, withFiles(listing))),
   });
 
+  const navigation = async (path: string) => selectBundleIndex(
+    await options.indexes?.() ?? generateBundleIndexes(await analyze()), path);
+
   return {
     async context() {
       const storedIndex = await options.adapter.readStoredIfPresent("index.md");
@@ -294,7 +302,11 @@ export function createR2OkfV1Operations(options: R2OkfV1OperationsOptions): OkfV
         audience: options.audience ?? "unspecified",
         instructions,
         index,
+        navigation: await navigation("."),
       };
+    },
+    async index({ path }) {
+      return { bundle: options.adapter.bundle, ...await navigation(path) };
     },
     async list({ path, depth }) {
       const documents = await options.adapter.documents();
