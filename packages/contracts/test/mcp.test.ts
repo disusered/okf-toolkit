@@ -122,3 +122,26 @@ test("apply requires the reviewed preview id on the wire", async () => {
   assert.equal((result as { isError?: boolean }).isError, true);
   assert.deepEqual(calls, []);
 });
+
+test("a client that has loaded no skill can still learn what a bundle is", async () => {
+  const { client } = await connected();
+  const { tools } = await client.listTools();
+
+  assert.match(String(client.getInstructions()), /named "shared"/);
+
+  for (const tool of tools) {
+    assert.ok(
+      (tool.description ?? "").length > 0,
+      `${tool.name} must carry a description; a title alone reaches no model`,
+    );
+    const bundle = (tool.inputSchema as { properties?: Record<string, { description?: string }> }).properties?.bundle;
+    assert.match(String(bundle?.description), /shared/, `${tool.name} must name the bundle it serves`);
+  }
+
+  const paths = tools.filter((tool) => tool.name === "okf_v1_index" || tool.name === "okf_v1_read");
+  assert.equal(paths.length, 2);
+  for (const tool of paths) {
+    const path = (tool.inputSchema as { properties?: Record<string, { description?: string }> }).properties?.path;
+    assert.match(String(path?.description), /Bundle-relative/, `${tool.name} must separate path from bundle`);
+  }
+});

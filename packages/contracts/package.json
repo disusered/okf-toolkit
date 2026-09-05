@@ -1,6 +1,6 @@
 {
   "name": "okf-contracts",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Versioned wire contracts, schemas, and conformance fixtures for OKF Toolkit",
   "type": "module",
   "repository": {
