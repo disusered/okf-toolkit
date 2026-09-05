@@ -1,6 +1,6 @@
 {
   "name": "okf-core",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Canonical parser, validator, link resolver, graph, and search engine for OKF v0.2",
   "type": "module",
   "repository": {
