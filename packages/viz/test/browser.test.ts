@@ -110,8 +110,17 @@ test("layout options give labels room and never animate", () => {
   assert.equal(options["nodeRepulsion"], 6000);
   assert.equal(options["idealEdgeLength"], 100);
   assert.equal(options["padding"], 36);
+  assert.equal(options["fit"], true);
   // The constructor layout carries no stop hook; runLayout adds one.
   assert.equal("stop" in options, false);
+});
+
+test("roomy natural layouts do not collapse a corpus into its viewport", () => {
+  const options = layoutOptions("cose", { fit: false, spacing: "roomy" });
+  assert.equal(options["fit"], false);
+  assert.equal(options["nodeRepulsion"], 14000);
+  assert.equal(options["idealEdgeLength"], 180);
+  assert.equal(options["componentSpacing"], 150);
 });
 
 test("layout names are the ones the page offers", () => {
@@ -122,7 +131,9 @@ test("layout names are the ones the page offers", () => {
 
 /** A stand-in for the parts of Cytoscape mountGraph reaches, recording what it was asked. */
 function fakeCytoscape(ids: readonly string[]) {
-  const asked: { fitted: string[][]; padding: number[] } = { fitted: [], padding: [] };
+  const asked: { fitted: string[][]; layouts: Record<string, unknown>[]; padding: number[] } = {
+    fitted: [], layouts: [], padding: [],
+  };
   const collection = (members: string[]) => ({
     length: members.length,
     members,
@@ -140,10 +151,15 @@ function fakeCytoscape(ids: readonly string[]) {
     filter: (match: (element: { id(): string }) => boolean) =>
       collection(ids.filter((id) => match({ id: () => id }))),
     getElementById: (id: string) => collection(ids.includes(id) ? [id] : []),
-    layout: () => ({ run() {} }),
+    layout(options: Record<string, unknown>) {
+      asked.layouts.push(options);
+      return { run() { (options["stop"] as (() => void) | undefined)?.(); } };
+    },
     resize() {},
     fit(elements: unknown, padding: number) {
-      asked.fitted.push([...(elements as { members: string[] }).members]);
+      asked.fitted.push(elements === undefined ? [...ids] : [
+        ...(elements as { members: string[] }).members,
+      ]);
       asked.padding.push(padding);
     },
     zoom: () => 1,
@@ -173,6 +189,14 @@ async function mounted(ids: readonly string[]) {
   const handle = mountGraph(container, GRAPH, { cytoscape: fake.cytoscape as never });
   return { asked: fake.asked, handle };
 }
+
+test("the initial camera frames settled layout positions", async () => {
+  const { asked, handle } = await mounted(["a.md", "b.md"]);
+  assert.equal(asked.layouts[0]?.["name"], "cose");
+  assert.equal(typeof asked.layouts[0]?.["stop"], "function");
+  assert.deepEqual(asked.fitted[0], ["a.md", "b.md"]);
+  handle.destroy();
+});
 
 test("framing a set fits exactly those nodes", async () => {
   // A focus mode has already decided what matters; the camera should show that and no more.

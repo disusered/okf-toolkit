@@ -1,5 +1,10 @@
-import type { VisualizationGraph, VisualizationNode } from "../graph.js";
-import { isLayoutName, layoutOptions, type LayoutName } from "./layout.js";
+import type { VisualizationIndex, VisualizationIndexNode } from "../graph.js";
+import {
+  isLayoutName,
+  layoutOptions,
+  type GraphSpacing,
+  type LayoutName,
+} from "./layout.js";
 import { graphStylesheet, nodeClasses, preferredTheme, type GraphTheme } from "./theme.js";
 
 /** The subset of Cytoscape this module uses, so a consumer's version is not constrained here. */
@@ -39,6 +44,9 @@ export interface MountGraphOptions {
   /** Defaults to the viewer's own colour-scheme setting. */
   readonly theme?: GraphTheme;
   readonly layout?: LayoutName;
+  readonly spacing?: GraphSpacing;
+  readonly initialViewport?: "fit" | "natural";
+  readonly overviewZoom?: number | null;
 }
 
 export interface GraphHandle {
@@ -52,7 +60,7 @@ export interface GraphHandle {
    * Dimming rather than hiding: a filtered graph that removes nodes also removes the shape of
    * the corpus, and the reader loses where they were.
    */
-  setDimmed(keep: (node: VisualizationNode) => boolean): void;
+  setDimmed(keep: (node: VisualizationIndexNode) => boolean): void;
   runLayout(name: LayoutName): void;
   /** Resize, fit, and ease the zoom back so labels drawn below a node stay on screen. */
   fit(): void;
@@ -66,18 +74,22 @@ export interface GraphHandle {
   frame(ids: Iterable<string>, padding?: number): void;
   onSelect(listener: (id: string) => void): void;
   onBackground(listener: () => void): void;
-  onHover(listener: (node: VisualizationNode | null, at: { x: number; y: number }) => void): void;
+  onHover(listener: (node: VisualizationIndexNode | null, at: { x: number; y: number }) => void): void;
   destroy(): void;
 }
 
 export function mountGraph(
   container: HTMLElement,
-  graph: VisualizationGraph,
+  graph: VisualizationIndex,
   options: MountGraphOptions,
 ): GraphHandle {
   const theme = options.theme ?? preferredTheme();
   const layout = options.layout ?? "cose";
+  const initialViewport = options.initialViewport ?? "fit";
+  const overviewZoom = options.overviewZoom === undefined ? 0.55 : options.overviewZoom;
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  let destroyed = false;
+  let sizingFrame: number | null = null;
 
   const elements = [
     ...graph.nodes.map((node) => ({
@@ -100,10 +112,19 @@ export function mountGraph(
     container,
     elements,
     style: graphStylesheet(theme),
-    // No stop hook here: it would fire during construction, before `cy` is assigned, and the
-    // throw would abort everything after it. cose fits on its own.
-    layout: layoutOptions(layout),
+    // Run the real layout after Cytoscape has returned its core. A constructor-time stop hook
+    // can fire before `cy` is assigned, while a constructor-time fit can measure the pre-layout
+    // positions and leave the settled graph clipped into one corner.
+    layout: { name: "preset", fit: false },
   });
+
+  function updateOverview(): void {
+    if (overviewZoom === null) return;
+    const overview = cy.zoom() < overviewZoom;
+    cy.elements().forEach((element) => element.toggleClass("overview", overview));
+  }
+  cy.on("zoom", updateOverview);
+  updateOverview();
 
   function fit(): void {
     cy.resize();
@@ -114,17 +135,40 @@ export function mountGraph(
     cy.center();
   }
 
-  // One frame is not reliably enough: a flex container may still measure zero, and a fit
-  // against a zero viewport leaves every node off-screen. Wait until it has real dimensions.
-  function fitWhenSized(): void {
+  function natural(): void {
+    fit();
+    // A whole-corpus fit is useful as a reference, but makes large bundles unreadably tiny.
+    // Open one level closer while retaining the settled graph's center; the rest remains
+    // available by panning instead of being compressed into the viewport.
+    cy.zoom(Math.min(cy.zoom() * 2, 0.8));
+    cy.center();
+    updateOverview();
+  }
+
+  // A flex container may initially measure zero. Wait until it has real dimensions, then run
+  // the layout and apply the camera from its stop hook so the final positions are what we frame.
+  function runInitialLayoutWhenSized(): void {
+    if (destroyed) return;
     const box = container.getBoundingClientRect();
     if (box.width < 1 || box.height < 1) {
-      requestAnimationFrame(fitWhenSized);
+      sizingFrame = requestAnimationFrame(runInitialLayoutWhenSized);
       return;
     }
-    fit();
+    cy.resize();
+    cy.layout({
+      ...layoutOptions(layout, { fit: false, spacing: options.spacing }),
+      stop: () => {
+        if (destroyed) return;
+        if (initialViewport === "fit") fit();
+        else natural();
+      },
+    }).run();
   }
-  if (typeof requestAnimationFrame === "function") requestAnimationFrame(fitWhenSized);
+  if (typeof requestAnimationFrame === "function") {
+    sizingFrame = requestAnimationFrame(runInitialLayoutWhenSized);
+  } else {
+    runInitialLayoutWhenSized();
+  }
 
   const handle: GraphHandle = {
     cy,
@@ -132,6 +176,10 @@ export function mountGraph(
       cy.elements().unselect();
     },
     destroy() {
+      destroyed = true;
+      if (sizingFrame !== null && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(sizingFrame);
+      }
       cy.destroy();
     },
     fit,
@@ -162,7 +210,10 @@ export function mountGraph(
     },
     runLayout(name) {
       if (!isLayoutName(name)) return;
-      cy.layout({ ...layoutOptions(name), stop: () => fit() }).run();
+      cy.layout({
+        ...layoutOptions(name, { fit: false, spacing: options.spacing }),
+        stop: () => initialViewport === "fit" ? fit() : natural(),
+      }).run();
     },
     select(id, selectOptions) {
       const element = cy.getElementById(id);

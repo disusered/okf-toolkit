@@ -1,4 +1,4 @@
-import type { VisualizationGraph } from "../graph.js";
+import type { VisualizationIndexNode } from "../graph.js";
 
 /**
  * Colours the graph resolves when it is drawn rather than when it is generated.
@@ -102,6 +102,7 @@ export function graphStylesheet(theme: GraphTheme): unknown[] {
     { selector: "node.stale", style: { "opacity": 1, "border-width": 5, "border-color": theme.stale } },
     { selector: "node.pending", style: { "opacity": 0.5, "border-width": 1, "border-style": "dotted", "border-color": theme.pending } },
     { selector: "node:selected", style: { "border-width": 4, "border-color": theme.selected } },
+    { selector: "node.overview:unselected", style: { "label": "" } },
     {
       selector: "edge",
       style: {
@@ -115,6 +116,7 @@ export function graphStylesheet(theme: GraphTheme): unknown[] {
     },
     { selector: 'edge[relation = "source"]', style: { "line-style": "dashed" } },
     { selector: 'edge[relation = "pending"]', style: { "line-style": "dotted", "opacity": 0.6 } },
+    { selector: "edge.overview", style: { "opacity": 0.24, "target-arrow-shape": "none" } },
     // An edge into an Attested Computation is drawn as its own thing, so a reader can trace
     // which pages rest on a sanctioned run rather than on prose. It comes after the relation
     // rules because leaning on a computation outranks how the reference was written.
@@ -142,7 +144,7 @@ export function graphStylesheet(theme: GraphTheme): unknown[] {
  * the page, and opacity is whether a person ever checked it. A reader's metadata table still
  * spells all of it out, because a graph cannot carry a key.
  */
-export function nodeClasses(node: VisualizationGraph["nodes"][number]): string[] {
+export function nodeClasses(node: VisualizationIndexNode): string[] {
   const classes = [`author-${node.authorKind}`];
   if (node.pending) {
     classes.push("pending");

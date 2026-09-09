@@ -127,6 +127,33 @@ export interface VisualizationGraph {
   readonly tags: readonly string[];
 }
 
+/** The metadata-only graph an interactive reader needs before opening a document. */
+export interface VisualizationIndexNode {
+  readonly id: string;
+  readonly path: string;
+  readonly title: string;
+  readonly type: string;
+  readonly shape: string;
+  readonly authorKind: AuthorKind;
+  readonly description: string;
+  readonly status: string;
+  readonly trustTier: TrustTier;
+  readonly stale: boolean | null;
+  readonly tags: readonly string[];
+  readonly color: string;
+  readonly size: number;
+  readonly pending: boolean;
+}
+
+export interface VisualizationIndex {
+  readonly nodes: readonly VisualizationIndexNode[];
+  readonly edges: readonly VisualizationEdge[];
+  readonly types: readonly string[];
+  readonly trustTiers: readonly TrustTier[];
+  readonly statuses: readonly string[];
+  readonly tags: readonly string[];
+}
+
 const PALETTE = [
   "#2563eb",
   "#7c3aed",
@@ -460,4 +487,32 @@ export function toVisualizationGraph(analysis: BundleAnalysis): VisualizationGra
   const tags = [...new Set(nodes.flatMap((node) => node.tags))].sort(byCodePoint);
 
   return { nodes: allNodes, edges, types, trustTiers, statuses, tags };
+}
+
+/** Remove document bodies and provenance detail from the graph's initial browser payload. */
+export function toVisualizationIndex(analysis: BundleAnalysis): VisualizationIndex {
+  const graph = toVisualizationGraph(analysis);
+  return {
+    edges: graph.edges,
+    types: graph.types,
+    trustTiers: graph.trustTiers,
+    statuses: graph.statuses,
+    tags: graph.tags,
+    nodes: graph.nodes.map((node) => ({
+      id: node.id,
+      path: node.path,
+      title: node.title,
+      type: node.type,
+      shape: node.shape,
+      authorKind: node.authorKind,
+      description: node.description,
+      status: node.status,
+      trustTier: node.trustTier,
+      stale: node.stale,
+      tags: node.tags,
+      color: node.color,
+      size: node.size,
+      pending: node.pending,
+    })),
+  };
 }
