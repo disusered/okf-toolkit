@@ -1,6 +1,6 @@
 {
   "name": "@disusered/okf-cli",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Command line for OKF bundles, including the self-contained HTML page",
   "type": "module",
   "repository": {
@@ -35,16 +35,18 @@
     "vendor": "node scripts/vendor.mjs",
     "build": "pnpm vendor && tsc -p tsconfig.json",
     "prepack": "pnpm build",
-    "test": "pnpm vendor && tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "test": "pnpm vendor && tsc -p tsconfig.test.json && node --test \".test-dist/test/**/*.test.js\"",
     "typecheck": "pnpm vendor && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
     "okf-contracts": "workspace:*",
     "okf-core": "workspace:*",
     "okf-node": "workspace:*",
     "okf-viz": "workspace:*"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "24.13.3",
     "cytoscape": "3.34.1",
     "dompurify": "3.4.13",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_HTTP_PORT, parseServerArguments } from "../src/arguments.js";
+import { DEFAULT_HTTP_PORT, parseServerArguments } from "../../src/mcp/arguments.js";
 
 test("the project root comes from argv, never from the process cwd", () => {
   const parsed = parseServerArguments(["/srv/knowledge", "--bundle", "private"]);
@@ -70,4 +70,42 @@ test("an unknown option is rejected rather than read as a project root", () => {
 test("help is available without a project root", () => {
   assert.equal(parseServerArguments(["--help"]).help, true);
   assert.equal(parseServerArguments(["/srv", "--bundle", "x", "-h"]).help, true);
+});
+
+test("identity flags describe the deployment", () => {
+  const parsed = parseServerArguments([
+    "/srv/knowledge", "--bundle", "xbol", "--http",
+    "--name", "xbol-knowledge",
+    "--title", "XBOL Knowledge",
+    "--description", "Evidence-backed platform knowledge.",
+    "--website", "https://example.test/xbol",
+    "--icon", "https://example.test/icon.svg",
+    "--purpose", "Knowledge for the XBOL platforms.",
+    "--allowed-host", "XBOL-mcp.example.test",
+    "--allowed-host", "other-mcp.example.test",
+  ]);
+
+  assert.equal(parsed.name, "xbol-knowledge");
+  assert.equal(parsed.title, "XBOL Knowledge");
+  assert.equal(parsed.description, "Evidence-backed platform knowledge.");
+  assert.equal(parsed.website, "https://example.test/xbol");
+  assert.equal(parsed.icon, "https://example.test/icon.svg");
+  assert.equal(parsed.purpose, "Knowledge for the XBOL platforms.");
+  assert.deepEqual(parsed.allowedHosts, ["xbol-mcp.example.test", "other-mcp.example.test"]);
+});
+
+test("a forwarded host is a bare hostname and only means something over HTTP", () => {
+  assert.throws(
+    () => parseServerArguments(["/srv", "--bundle", "x", "--allowed-host", "a.example.test"]),
+    /--allowed-host applies to --http only/,
+  );
+  assert.throws(
+    () => parseServerArguments(["/srv", "--bundle", "x", "--http", "--allowed-host", "https://a.example.test/"]),
+    /bare hostname/,
+  );
+  assert.throws(
+    () => parseServerArguments(["/srv", "--bundle", "x", "--http", "--allowed-host", "*.example.test"]),
+    /bare hostname/,
+  );
+  assert.throws(() => parseServerArguments(["/srv", "--bundle", "x", "--website", "not a url"]), /absolute URL/);
 });

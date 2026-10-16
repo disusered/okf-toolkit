@@ -6,7 +6,7 @@ import test from "node:test";
 import type { Diagnostic } from "okf-contracts";
 import { changePreviewId } from "okf-node";
 
-import { createOkfLocalServer, SERVER_VERSION } from "../src/server.js";
+import { createOkfLocalServer, SERVER_VERSION } from "../../src/mcp/server.js";
 import { callJson, callTool, connect, fixture, fixtureCopy } from "./support.js";
 
 const PROJECT = { projectRoot: fixture("project"), bundle: "fixture" } as const;
@@ -22,7 +22,7 @@ description: A concept written through okf_v1_apply_change.
 
 test("the reported version matches the package manifest", async () => {
   const manifest = JSON.parse(
-    await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
   ) as { version: string };
 
   assert.equal(SERVER_VERSION, manifest.version);

@@ -13,6 +13,7 @@ okf index docs
 okf index docs concepts
 okf visualize docs --out .okf/viz.html
 okf watch docs --out .okf/viz.html
+okf mcp . --bundle docs
 ```
 
 When a target is a repository rather than a bundle root, discovery uses only
@@ -55,6 +56,55 @@ Trusted local wrappers can explicitly pass `--profile-module FILE`, where the
 built JavaScript module exports a `profile` object compatible with
 `okf-core`'s `ValidationProfile`. Hosted consumers compose profiles directly in
 code. The CLI never executes validation command arrays from a manifest.
+
+## MCP server
+
+`okf mcp` serves one filesystem bundle's versioned `okf_v1_*` tools over MCP.
+stdio is the default; `--http` serves loopback HTTP at
+`http://127.0.0.1:1934/v1/mcp` plus `GET /healthz`.
+
+```sh
+okf mcp /srv/knowledge --bundle team
+okf mcp /srv/knowledge --bundle team --http --port 1934 \
+  --allowed-host knowledge-mcp.example.com \
+  --name example-knowledge --title "Example Knowledge" \
+  --purpose "Example's shared knowledge: decisions, policies, and runbooks."
+```
+
+- `<project-root>` comes from the command line, never the working directory,
+  and `--bundle` is always required, so a typo fails at startup.
+- The manifest's `access` decides what is served: `read` refuses
+  `okf_v1_preview_change` and `okf_v1_apply_change`; `read-write`, or no value,
+  serves all eleven tools.
+- The HTTP listener binds `127.0.0.1` only and refuses any `Host` or `Origin`
+  that is neither localhost nor an `--allowed-host`. Name the public hostname a
+  tunnel forwards with `--allowed-host`; the tunnel's edge authenticates
+  callers.
+- `--name`, `--title`, `--description`, `--website`, `--icon`, and `--purpose`
+  set what a client lists and what a model reads first. `--purpose` opens the
+  server instructions.
+- `okf_v1_visualize` writes its page to a temporary directory and returns a
+  `file:` URL.
+
+An application embeds the same server, and may add its own tools beside it:
+
+```ts
+import { createOkfLocalServer, serveHttp } from "@disusered/okf-cli";
+
+const local = await createOkfLocalServer({
+  projectRoot: "/srv/knowledge",
+  bundle: "team",
+  name: "example-knowledge",
+  version: "1.4.0",
+  identity: { title: "Example Knowledge", purpose: "Example's shared knowledge." },
+});
+await serveHttp(() => local.createServer(), {
+  port: 1934,
+  allowedHosts: ["knowledge-mcp.example.com"],
+  service: "example-knowledge",
+  version: "1.4.0",
+});
+```
 
 ## Exit status
 

@@ -2,7 +2,7 @@ import path from "node:path";
 
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { AnalyzeBundleOptions } from "okf-core";
-import { createOkfV1McpServer, type OkfV1Operations } from "okf-contracts";
+import { createOkfV1McpServer, type OkfV1Operations, type OkfV1ServerIdentity } from "okf-contracts";
 import { loadValidationProfile, resolveBundleTarget, type ResolvedBundleTarget } from "okf-node";
 
 import { bundleSettings, type BundleSettings } from "./bundle.js";
@@ -13,7 +13,7 @@ import { createFilesystemOkfV1Operations } from "./operations.js";
  * `package.json`, which does not sit under `rootDir`; `test/version.test.ts` keeps the two
  * from drifting.
  */
-export const SERVER_VERSION = "2.0.0";
+export const SERVER_VERSION = "2.1.0";
 
 export interface OkfLocalServerOptions {
   /** Absolute or relative project root. Relative paths resolve against `cwd`. */
@@ -25,6 +25,12 @@ export interface OkfLocalServerOptions {
   /** Only used to resolve a relative `projectRoot`. Defaults to the process cwd. */
   readonly cwd?: string;
   readonly visualizationDirectory?: string;
+  /** The server name a client sees. Defaults to `okf-<bundle>`. */
+  readonly name?: string;
+  /** The deployment's own version. Defaults to {@link SERVER_VERSION}. */
+  readonly version?: string;
+  /** Title, description, website, icons, and the one-sentence purpose that opens the instructions. */
+  readonly identity?: OkfV1ServerIdentity;
 }
 
 export interface OkfLocalServer {
@@ -69,8 +75,9 @@ export async function createOkfLocalServer(options: OkfLocalServerOptions): Prom
     settings,
     operations,
     createServer: () => createOkfV1McpServer({
-      name: `okf-${settings.name}`,
-      version: SERVER_VERSION,
+      ...options.identity,
+      name: options.name ?? `okf-${settings.name}`,
+      version: options.version ?? SERVER_VERSION,
       bundle: settings.name,
       operations,
     }),

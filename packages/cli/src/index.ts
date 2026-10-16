@@ -321,3 +321,22 @@ export { parseArguments } from "./arguments.js";
 export { stableJson } from "./json.js";
 export { generateVisualization, GeneratorError } from "./generate.js";
 export type { VisualizationInput } from "./generate.js";
+export {
+  createFilesystemOkfV1Operations,
+  createOkfLocalServer,
+  DEFAULT_HTTP_PORT,
+  HEALTH_PATH,
+  LOOPBACK_HOST,
+  MCP_HELP,
+  parseMcpArguments,
+  ReadOnlyBundleError,
+  runMcp,
+  SERVER_VERSION,
+  serveHttp,
+  type FilesystemOkfV1OperationsOptions,
+  type HttpServerHandle,
+  type McpServerArguments,
+  type OkfLocalServer,
+  type OkfLocalServerOptions,
+  type ServeHttpOptions,
+} from "./mcp/index.js";
