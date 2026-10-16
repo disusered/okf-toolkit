@@ -9,7 +9,10 @@ name: Deploy an MCP Worker
 #         worker-vars: |
 #           CF_ACCESS_AUD=${{ vars.CF_ACCESS_AUD }}
 #         smoke-url: ${{ vars.WORKER_URL }}
-#       secrets: inherit
+#       secrets:
+#         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+#         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+#         WORKER_SECRETS: ${{ format('BOT_TOKEN={0}', secrets.BOT_TOKEN) }}
 #
 # Every pull request and push runs test, typecheck and build. Only a push to main, or a
 # dispatch on main, deploys, and only while that commit is still the tip of main.
@@ -99,6 +102,14 @@ jobs:
           done <<<"$WORKER_VARS"
 
           if [ -n "$WORKER_SECRETS" ]; then
+            # The same refusal for secrets: an empty value would upload an empty credential
+            # and break the Worker silently instead of failing the deploy.
+            while IFS= read -r line; do
+              [ -n "$line" ] || continue
+              name=${line%%=*}
+              [ "$name" != "$line" ] || { echo "WORKER_SECRETS line without NAME=."; exit 1; }
+              [ -n "${line#*=}" ] || { echo "$name secret is empty."; exit 1; }
+            done <<<"$WORKER_SECRETS"
             secrets_file=$(mktemp)
             trap 'rm -f "$secrets_file"' EXIT
             printf '%s\n' "$WORKER_SECRETS" >"$secrets_file"
