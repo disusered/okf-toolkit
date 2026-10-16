@@ -66,3 +66,47 @@ R2 operations.
 
 Pass the visualization generator to the Queue consumer. Use `okf-core` and
 `okf-viz` so local and hosted projections consume the same Bundle Analysis.
+
+## Access and Worker helpers
+
+A Worker behind Cloudflare Access verifies the assertion Access forwards, so it
+knows who is calling and can decide who may apply changes:
+
+```ts
+import {
+  accessAuthorizer,
+  createOkfV1Worker,
+  healthResponse,
+  HEALTH_PATH,
+  logError,
+  requiredEnv,
+} from "okf-cloudflare";
+
+const worker = createOkfV1Worker<Env>({
+  name: "example-knowledge",
+  version: env.RELEASE_VERSION,
+  title: "Example Knowledge",
+  purpose: "Example's shared knowledge: decisions, policies, and runbooks.",
+  async authorize(request, env) {
+    return accessAuthorizer({
+      teamDomain: requiredEnv(env, "CF_ACCESS_TEAM_DOMAIN"),
+      audience: requiredEnv(env, "CF_ACCESS_AUD"),
+    })(request);
+  },
+  // bundle, visualizationKey, bucket, canApply, operations
+});
+```
+
+- `accessAuthorizer` checks the `Cf-Access-Jwt-Assertion` signature against the
+  team's published keys, the issuer, the audience, and expiry. It returns the
+  subject and the lowercased email, or `null` for any failure, without saying
+  why.
+- `healthResponse` answers `GET /healthz` with `{status, service, version}`.
+- `requiredEnv` reads a trimmed setting and throws `ConfigurationError` when it
+  is missing.
+- `logError` writes one structured line naming the event and the error class,
+  never its message.
+- `withMcpAccept` widens a request's `Accept` to what the streamable HTTP
+  transport requires, for gateways that send only one of the two types.
+  `createOkfV1Worker` applies it to every MCP request.
+

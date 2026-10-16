@@ -29,7 +29,7 @@ export interface BundleSettings {
  */
 export function bundleSettings(target: ResolvedBundleTarget): BundleSettings {
   if (target.manifest === null || target.name === null) {
-    throw new Error("okf-mcp serves a manifest bundle; no .agents/okf.yaml bundle was resolved");
+    throw new Error("okf mcp serves a manifest bundle; no .agents/okf.yaml bundle was resolved");
   }
   const declared = target.manifest.bundles[target.name];
   if (declared === undefined) {

@@ -6,11 +6,11 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 
-import { createOkfLocalServer, type OkfLocalServerOptions } from "../src/server.js";
+import { createOkfLocalServer, type OkfLocalServerOptions } from "../../src/mcp/server.js";
 
 /** Fixtures live in the source tree; the compiled tests run two directories below it. */
 export function fixture(name: string): string {
-  return fileURLToPath(new URL(`../../test/fixtures/${name}`, import.meta.url));
+  return fileURLToPath(new URL(`../../../test/mcp/fixtures/${name}`, import.meta.url));
 }
 
 /** A throwaway copy, for the tests that write to the bundle. */

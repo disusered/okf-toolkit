@@ -38,7 +38,7 @@ pass, and neither Consumer contains a second generic OKF parser.
 ## Gate 3: Iteramind private and shared
 
 - Reach the Private Bundle with the CLI plus the filesystem adapter, and serve
-  the same bundle over `okf-mcp` for a surface that has no file tools of its
+  the same bundle over `okf mcp` for a surface that has no file tools of its
   own. Both doors read the same files under the same profile.
 - Compose the hosted Worker from Iteramind Access and author policy plus the
   versioned Cloudflare MCP/R2 implementation.

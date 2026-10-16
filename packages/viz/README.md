@@ -14,6 +14,10 @@ import { toVisualizationGraph } from "okf-viz";
 const graph = toVisualizationGraph(analyzeBundle(source));
 ```
 
+Interactive readers should use `toVisualizationIndex` for their initial browser payload. It
+keeps the graph, facets, titles, descriptions and tags while leaving document bodies and full
+provenance detail to the reader's on-demand document request.
+
 `toVisualizationGraph` is pure. No clock, environment, storage, network,
 Markdown parsing, or link resolution enters it, so the same analysis always
 produces the same graph.
@@ -41,6 +45,21 @@ import { mountGraph } from "okf-viz/browser";
 const handle = mountGraph(document.getElementById("graph"), graph, { cytoscape });
 handle.select("concepts/example.md");
 ```
+
+A consumer with a large corpus can keep the graph larger than the viewport and ask for more
+spacing without depending on Cytoscape's option shape:
+
+```ts
+mountGraph(element, graph, {
+  cytoscape,
+  spacing: "roomy",
+  initialViewport: "natural",
+  theme: myApplicationTheme,
+});
+```
+
+At overview zoom the renderer suppresses ordinary labels and arrowheads. Selection remains
+visible, and detail returns as the user zooms in.
 
 The handle covers what a reader does to a graph: `select` one node, `setDimmed` to fade
 everything a predicate rejects, `runLayout`, `fit` the whole graph, and `frame` a set of

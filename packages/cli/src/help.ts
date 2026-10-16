@@ -16,6 +16,8 @@ Commands:
   watch [target] --out FILE        Rebuild the viewer when Markdown changes
   change preview [target] --input FILE|-
   change apply [target] --preview-id ID --input FILE|-
+  mcp <project-root> --bundle NAME Serve one bundle's okf_v1_* tools over MCP
+                                   (stdio, or loopback HTTP with --http; okf mcp --help)
 
 Options:
   --bundle NAME    Select one bundle from .agents/okf.yaml

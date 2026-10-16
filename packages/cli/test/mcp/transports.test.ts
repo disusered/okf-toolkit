@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import test from "node:test";
+import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
-import { serveHttp } from "../src/http.js";
-import { createOkfLocalServer } from "../src/server.js";
+import { serveHttp } from "../../src/mcp/http.js";
+import { createOkfLocalServer } from "../../src/mcp/server.js";
 import { fixture } from "./support.js";
 
-const BIN = fileURLToPath(new URL("../src/bin.js", import.meta.url));
+const BIN = fileURLToPath(new URL("../../src/bin.js", import.meta.url));
 
 function collect(stream: NodeJS.ReadableStream): { read: () => string } {
   let text = "";
@@ -22,9 +23,9 @@ function collect(stream: NodeJS.ReadableStream): { read: () => string } {
 test("a real client drives the installed binary over stdio", async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [BIN, fixture("project"), "--bundle", "fixture", "--today", "2026-09-01"],
+    args: [BIN, "mcp", fixture("project"), "--bundle", "fixture", "--today", "2026-09-01"],
     // Spawned from somewhere unrelated to the bundle: the root must come from argv.
-    cwd: fileURLToPath(new URL("../", import.meta.url)),
+    cwd: fileURLToPath(new URL("../../", import.meta.url)),
     stderr: "pipe",
   });
   const notes = collect(transport.stderr as unknown as NodeJS.ReadableStream);
@@ -40,7 +41,7 @@ test("a real client drives the installed binary over stdio", async () => {
 
     assert.equal(tools.length, 11);
     assert.match(String(result.content[0]?.text), /# Fixture bundle/);
-    assert.match(notes.read(), /okf-mcp: serving bundle fixture \(read-write\) from .*knowledge over stdio/);
+    assert.match(notes.read(), /okf mcp: serving bundle fixture \(read-write\) from .*knowledge over stdio/);
   } finally {
     await client.close();
   }
@@ -49,7 +50,7 @@ test("a real client drives the installed binary over stdio", async () => {
 test("standard output carries protocol traffic only", async () => {
   const child = spawn(
     process.execPath,
-    [BIN, fixture("project"), "--bundle", "fixture"],
+    [BIN, "mcp", fixture("project"), "--bundle", "fixture"],
     { stdio: ["pipe", "pipe", "pipe"] },
   );
   const stdout = collect(child.stdout);
@@ -90,7 +91,7 @@ test("standard output carries protocol traffic only", async () => {
 
   child.kill("SIGTERM");
   assert.deepEqual(identifiers, [1, 2]);
-  assert.match(stderr.read(), /okf-mcp: serving bundle fixture/);
+  assert.match(stderr.read(), /okf mcp: serving bundle fixture/);
 });
 
 test("loopback HTTP serves the versioned path and refuses a foreign origin", async () => {
@@ -120,6 +121,68 @@ test("loopback HTTP serves the versioned path and refuses a foreign origin", asy
 
     const elsewhere = await fetch(`http://127.0.0.1:${String(handle.port)}/mcp`, { method: "POST" });
     assert.equal(elsewhere.status, 404);
+  } finally {
+    await handle.close();
+  }
+});
+
+/** A raw request, because `fetch` will not send a caller-chosen `Host`. */
+function rawPost(port: number, host: string, origin?: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const outgoing = httpRequest({
+      host: "127.0.0.1",
+      port,
+      path: "/v1/mcp",
+      method: "POST",
+      headers: {
+        host,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...(origin === undefined ? {} : { origin }),
+      },
+    }, (response) => {
+      response.resume();
+      resolve(response.statusCode ?? 0);
+    });
+    outgoing.once("error", reject);
+    outgoing.end(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }));
+  });
+}
+
+test("a tunnel's public host is accepted only when named, and health needs no session", async () => {
+  const local = await createOkfLocalServer({
+    projectRoot: fixture("project"),
+    bundle: "fixture",
+    name: "fixture-knowledge",
+    version: "0.1.0",
+    identity: { title: "Fixture Knowledge", purpose: "The fixture Bundle used by these tests." },
+  });
+  const handle = await serveHttp(() => local.createServer(), {
+    port: 0,
+    allowedHosts: ["fixture-mcp.example.test"],
+    service: "fixture-knowledge",
+    version: "0.1.0",
+  });
+
+  try {
+    const health = await fetch(`http://127.0.0.1:${String(handle.port)}/healthz`);
+    assert.equal(health.status, 200);
+    assert.deepEqual(await health.json(), { status: "ok", service: "fixture-knowledge", version: "0.1.0" });
+
+    // Not a valid MCP session, so the transport refuses it; what matters is that it got that far.
+    assert.notEqual(await rawPost(handle.port, "fixture-mcp.example.test"), 403);
+    assert.notEqual(await rawPost(handle.port, "fixture-mcp.example.test", "https://fixture-mcp.example.test"), 403);
+    assert.equal(await rawPost(handle.port, "unnamed.example.test"), 403);
+    assert.equal(await rawPost(handle.port, "fixture-mcp.example.test", "https://unnamed.example.test"), 403);
+
+    const client = new Client({ name: "okf-mcp-identity-test", version: "1" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(handle.url)));
+    const server = client.getServerVersion();
+    assert.equal(server?.name, "fixture-knowledge");
+    assert.equal(server?.version, "0.1.0");
+    assert.equal(server?.title, "Fixture Knowledge");
+    assert.ok(client.getInstructions()?.startsWith("The fixture Bundle used by these tests."));
+    await client.close();
   } finally {
     await handle.close();
   }

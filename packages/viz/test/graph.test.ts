@@ -9,7 +9,7 @@ import type {
   BundleGraphNode,
 } from "okf-contracts";
 
-import { toVisualizationGraph } from "../src/index.js";
+import { toVisualizationGraph, toVisualizationIndex } from "../src/index.js";
 
 const POSITION = { line: 1, column: 1, offset: 0 } as const;
 const RANGE = { start: POSITION, end: POSITION } as const;
@@ -186,6 +186,15 @@ test("projects canonical analysis without parsing OKF again", () => {
   );
   assert.deepEqual(toVisualizationGraph(proseOnly).edges, []);
   assert.deepEqual(toVisualizationGraph(proseOnly).nodes[0]?.links, []);
+});
+
+test("projects a lightweight reader index without document bodies", () => {
+  const index = toVisualizationIndex(BUNDLE);
+  assert.equal(index.nodes.length, 2);
+  assert.equal(index.edges.length, 2);
+  assert.equal("body" in (index.nodes[0] ?? {}), false);
+  assert.equal("sources" in (index.nodes[0] ?? {}), false);
+  assert.equal(index.nodes[0]?.description, "One description");
 });
 
 test("trust signals reach the projection instead of being discarded", () => {

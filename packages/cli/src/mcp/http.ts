@@ -16,8 +16,20 @@ import { LOOPBACK_HOST } from "./arguments.js";
 export interface ServeHttpOptions {
   /** 0 asks the operating system for an ephemeral port; the handle reports what it got. */
   readonly port: number;
+  /**
+   * Public hostnames a tunnel or reverse proxy forwards to this loopback listener. Each is
+   * accepted as the hostname of `Host` and of `Origin`. Authentication for those names
+   * belongs to the proxy in front; this listener stays on loopback either way.
+   */
+  readonly allowedHosts?: readonly string[];
+  /** Named in `/healthz`. */
+  readonly service?: string;
+  readonly version?: string;
   readonly onerror?: (error: Error) => void;
 }
+
+/** The liveness route. It reads nothing from the Bundle and needs no MCP session. */
+export const HEALTH_PATH = "/healthz";
 
 export interface HttpServerHandle {
   readonly server: Server;
@@ -91,8 +103,15 @@ export async function serveHttp(
   const handler = createMcpHandler(factory, {
     ...(options.onerror === undefined ? {} : { onerror: options.onerror }),
   });
-  const allowedHosts = localhostAllowedHostnames();
-  const allowedOrigins = localhostAllowedOrigins();
+  // Both allowlists hold hostnames: the SDK compares the hostname of `Host` and of `Origin`.
+  const forwarded = (options.allowedHosts ?? []).map((host) => host.replace(/:\d+$/, ""));
+  const allowedHosts = [...localhostAllowedHostnames(), ...forwarded];
+  const allowedOrigins = [...localhostAllowedOrigins(), ...forwarded];
+  const health = JSON.stringify({
+    status: "ok",
+    ...(options.service === undefined ? {} : { service: options.service }),
+    ...(options.version === undefined ? {} : { version: options.version }),
+  });
 
   const server = createServer((message, target) => {
     void (async () => {
@@ -106,7 +125,12 @@ export async function serveHttp(
           await send(refused, target);
           return;
         }
-        if (new URL(request.url).pathname !== OKF_V1_MCP_PATH) {
+        const { pathname } = new URL(request.url);
+        if (pathname === HEALTH_PATH && request.method === "GET") {
+          target.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(health);
+          return;
+        }
+        if (pathname !== OKF_V1_MCP_PATH) {
           target.writeHead(404).end();
           return;
         }
