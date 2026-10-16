@@ -1,6 +1,6 @@
 {
   "name": "okf-cloudflare",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "One-bundle R2, MCP, and queue composition for OKF",
   "type": "module",
   "repository": {
@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
+    "jose": "6.2.9",
     "okf-contracts": "workspace:*",
     "okf-core": "workspace:*"
   },

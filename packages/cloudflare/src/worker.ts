@@ -6,11 +6,11 @@ import {
   OKF_V1_MCP_PATH,
   OKF_V1_VISUALIZATION_PATH,
   type OkfV1Operations,
+  type OkfV1ServerIdentity,
 } from "okf-contracts";
 
 import type { R2BucketLike } from "./r2.js";
-
-const REQUIRED_ACCEPT = "application/json, text/event-stream";
+import { withMcpAccept } from "./service.js";
 
 function mapping(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,13 +22,14 @@ export interface OkfPrincipal {
   readonly claims?: Readonly<Record<string, unknown>>;
 }
 
-export interface OkfV1WorkerOptions<Env> {
+export interface OkfV1WorkerOptions<Env> extends OkfV1ServerIdentity {
   readonly name: string;
+  /** The deployment's own version, not the toolkit's. */
   readonly version: string;
   readonly bundle: string;
   readonly visualizationKey: string;
   bucket(env: Env): R2BucketLike | null;
-  /** Compose Cloudflare Access or another deployment-specific identity policy here. */
+  /** Compose `accessAuthorizer` or another deployment-specific identity policy here. */
   authorize(request: Request, env: Env): Promise<OkfPrincipal | null>;
   canApply(
     principal: OkfPrincipal,
@@ -37,19 +38,6 @@ export interface OkfV1WorkerOptions<Env> {
     env: Env,
   ): Promise<boolean>;
   operations(principal: OkfPrincipal, env: Env): OkfV1Operations;
-}
-
-function normalizedAccept(request: Request, body: string): Request {
-  const headers = new Headers(request.headers);
-  const accept = headers.get("accept") ?? "";
-  if (!accept.includes("application/json") || !accept.includes("text/event-stream")) {
-    headers.set("accept", REQUIRED_ACCEPT);
-  }
-  return new Request(request.url, {
-    method: request.method,
-    headers,
-    ...(body.length === 0 ? {} : { body }),
-  });
 }
 
 function applyChangesOf(body: string): readonly (Change | null)[] | undefined {
@@ -128,9 +116,14 @@ export function createOkfV1Worker<Env>(options: OkfV1WorkerOptions<Env>) {
         name: options.name,
         version: options.version,
         bundle: options.bundle,
+        ...(options.title === undefined ? {} : { title: options.title }),
+        ...(options.description === undefined ? {} : { description: options.description }),
+        ...(options.websiteUrl === undefined ? {} : { websiteUrl: options.websiteUrl }),
+        ...(options.icons === undefined ? {} : { icons: options.icons }),
+        ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
         operations: options.operations(principal, env),
       }));
-      return handler.fetch(normalizedAccept(request, body));
+      return handler.fetch(withMcpAccept(request, body));
     },
   };
 }
