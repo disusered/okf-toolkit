@@ -253,8 +253,11 @@ export {
   createOkfV1McpServer,
   OKF_V1_MCP_PATH,
   OKF_V1_VISUALIZATION_PATH,
+  serverInstructions,
   type OkfV1McpOptions,
   type OkfV1Operations,
+  type OkfV1ServerIcon,
+  type OkfV1ServerIdentity,
 } from "./mcp.js";
 
 export {

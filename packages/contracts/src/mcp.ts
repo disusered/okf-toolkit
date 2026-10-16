@@ -69,8 +69,30 @@ export interface OkfV1Operations {
   applyChange(request: ApplyChangeRequest): Promise<ChangeResult>;
 }
 
-export interface OkfV1McpOptions {
+/** One icon a client may show beside the server, as the MCP `Implementation` defines it. */
+export interface OkfV1ServerIcon {
+  readonly src: string;
+  readonly mimeType?: string;
+  readonly sizes?: readonly string[];
+  readonly theme?: "light" | "dark";
+}
+
+/**
+ * How a deployment introduces itself. Clients show `title`, `description`, `websiteUrl`, and
+ * `icons` where they list servers; a model reads `purpose` before anything else, so it should
+ * say in one sentence what the Bundle holds and what it is for.
+ */
+export interface OkfV1ServerIdentity {
+  readonly title?: string;
+  readonly description?: string;
+  readonly websiteUrl?: string;
+  readonly icons?: readonly OkfV1ServerIcon[];
+  readonly purpose?: string;
+}
+
+export interface OkfV1McpOptions extends OkfV1ServerIdentity {
   readonly name: string;
+  /** The deployment's own version, not the toolkit's. */
   readonly version: string;
   readonly bundle: string;
   readonly operations: OkfV1Operations;
@@ -80,8 +102,9 @@ export interface OkfV1McpOptions {
  * What a client is told about this deployment before it calls anything. A model that has loaded
  * no skill has only this and the tool schemas to go on, so the Bundle name has to appear in both.
  */
-function serverInstructions(bundle: string): string {
+export function serverInstructions(bundle: string, purpose?: string): string {
   return [
+    ...(purpose === undefined ? [] : [purpose.trim(), ""]),
     `This server serves one OKF Knowledge Bundle, named "${bundle}". Pass that name as the`,
     "`bundle` argument of every tool; any other name is refused.",
     "",
@@ -112,8 +135,22 @@ function failure(error: unknown) {
 
 export function createOkfV1McpServer(options: OkfV1McpOptions): McpServer {
   const server = new McpServer(
-    { name: options.name, version: options.version },
-    { instructions: serverInstructions(options.bundle) },
+    {
+      name: options.name,
+      version: options.version,
+      ...(options.title === undefined ? {} : { title: options.title }),
+      ...(options.description === undefined ? {} : { description: options.description }),
+      ...(options.websiteUrl === undefined ? {} : { websiteUrl: options.websiteUrl }),
+      ...(options.icons === undefined
+        ? {}
+        : {
+          icons: options.icons.map(({ sizes, ...icon }) => ({
+            ...icon,
+            ...(sizes === undefined ? {} : { sizes: [...sizes] }),
+          })),
+        }),
+    },
+    { instructions: serverInstructions(options.bundle, options.purpose) },
   );
   // Built here rather than at module scope so the description can name the Bundle this deployment
   // actually serves. `bundle` stays a plain string: a later deployment may serve a different one.

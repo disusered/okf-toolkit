@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import type { ChangePreview, ChangeResult } from "okf-contracts";
 
-import { createOkfV1McpServer, type OkfV1Operations } from "../src/mcp.js";
+import { createOkfV1McpServer, serverInstructions, type OkfV1Operations } from "../src/mcp.js";
 
 function operations(calls: string[]): OkfV1Operations {
   return {
@@ -74,6 +74,40 @@ test("the MCP surface is explicitly versioned", async () => {
     "okf_v1_validate",
     "okf_v1_visualize",
   ]);
+});
+
+test("a deployment introduces itself with its own identity and purpose", async () => {
+  const server = createOkfV1McpServer({
+    name: "example-knowledge",
+    version: "0.4.0",
+    bundle: "shared",
+    title: "Example Knowledge",
+    description: "Decisions and runbooks the team works from.",
+    websiteUrl: "https://knowledge.example.test",
+    icons: [{ src: "https://knowledge.example.test/icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+    purpose: "Example's shared knowledge: decisions, policies, and runbooks.",
+    operations: operations([]),
+  });
+  const client = new Client({ name: "test", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+
+  assert.deepEqual(client.getServerVersion(), {
+    name: "example-knowledge",
+    version: "0.4.0",
+    title: "Example Knowledge",
+    description: "Decisions and runbooks the team works from.",
+    websiteUrl: "https://knowledge.example.test",
+    icons: [{ src: "https://knowledge.example.test/icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+  });
+  const instructions = client.getInstructions() ?? "";
+  assert.ok(instructions.startsWith("Example's shared knowledge: decisions, policies, and runbooks.\n\n"));
+  assert.match(instructions, /named "shared"/);
+});
+
+test("without a purpose the instructions open with the Bundle name", () => {
+  assert.ok(serverInstructions("shared").startsWith('This server serves one OKF Knowledge Bundle, named "shared".'));
 });
 
 test("each operation refuses any bundle except the deployment bundle", async () => {
