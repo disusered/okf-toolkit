@@ -51,3 +51,23 @@ jobs:
               --directory "$directory" \
               --dependencies "$root/tarballs"
           done
+
+  infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.9.0
+          tofu_wrapper: false
+      - run: tofu fmt -check -recursive infra
+      - name: Validate every module
+        run: |
+          set -euo pipefail
+          for module in infra/modules/*/; do
+            echo "::group::$module"
+            tofu -chdir="$module" init -backend=false -input=false
+            tofu -chdir="$module" validate
+            echo "::endgroup::"
+          done

@@ -1,0 +1,127 @@
+name: Deploy an MCP Worker
+
+# Called by a Worker repository's own workflow:
+#
+#   jobs:
+#     worker:
+#       uses: disusered/okf-toolkit/.github/workflows/deploy-worker.yml@<ref>
+#       with:
+#         worker-vars: |
+#           CF_ACCESS_AUD=${{ vars.CF_ACCESS_AUD }}
+#         smoke-url: ${{ vars.WORKER_URL }}
+#       secrets: inherit
+#
+# Every pull request and push runs test, typecheck and build. Only a push to main, or a
+# dispatch on main, deploys, and only while that commit is still the tip of main.
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: "24"
+      worker-vars:
+        description: "Plain settings for `wrangler deploy --var`, one NAME=value per line. An empty value fails the deploy."
+        type: string
+        default: ""
+      smoke-url:
+        description: "Base URL of the deployed Worker. Empty skips the smoke check."
+        type: string
+        default: ""
+      smoke-paths:
+        description: "Paths, one per line, that an unauthenticated request must be refused at the edge."
+        type: string
+        default: /healthz
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      WORKER_SECRETS:
+        description: "Worker secrets, one NAME=value per line, applied with `wrangler deploy --secrets-file`."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    name: Test and deploy
+    runs-on: ubuntu-latest
+    # A newer run supersedes an older one rather than both racing on the deployment.
+    concurrency:
+      group: worker-deploy-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+      # `wrangler deploy --dry-run`: the pull-request check that the Worker still bundles and
+      # its configuration still parses.
+      - run: pnpm build
+
+      # Concurrency cancels by arrival order, not commit recency, and push events can arrive
+      # late, so a stale run could otherwise deploy older code. Compare against the tip.
+      - name: Deploy
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_VARS: ${{ inputs.worker-vars }}
+          WORKER_SECRETS: ${{ secrets.WORKER_SECRETS }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          tip=$(git rev-parse origin/main)
+          if [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "Refusing to deploy $GITHUB_SHA; origin/main is now $tip."
+            exit 0
+          fi
+
+          # A missing variable renders as an empty string, which `set -u` does not catch.
+          # Refusing it here keeps a deleted setting from deploying a Worker that rejects
+          # every request while the run still looks green.
+          args=(--var "RELEASE_VERSION:git-${GITHUB_SHA::7}")
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            name=${line%%=*}
+            value=${line#*=}
+            [ "$name" != "$line" ] || { echo "worker-vars line without NAME=: $name"; exit 1; }
+            [ -n "$value" ] || { echo "$name is empty."; exit 1; }
+            args+=(--var "$name:$value")
+          done <<<"$WORKER_VARS"
+
+          if [ -n "$WORKER_SECRETS" ]; then
+            secrets_file=$(mktemp)
+            trap 'rm -f "$secrets_file"' EXIT
+            printf '%s\n' "$WORKER_SECRETS" >"$secrets_file"
+            args+=(--secrets-file "$secrets_file")
+          fi
+
+          pnpm exec wrangler deploy "${args[@]}"
+
+      # Access fronts the hostname, so an unauthenticated request is refused at the edge and
+      # never reaches the Worker. A runner usually sees 403 where a workstation sees 401,
+      # because Cloudflare refuses datacenter traffic before Access issues its challenge.
+      - name: Smoke test
+        if: inputs.smoke-url != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          SMOKE_URL: ${{ inputs.smoke-url }}
+          SMOKE_PATHS: ${{ inputs.smoke-paths }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$SMOKE_URL$path")
+            case "$code" in
+              401|403|302) echo "unauthenticated $path refused at the edge ($code)" ;;
+              *) echo "unauthenticated $path returned $code, expected 401, 403, or 302"; exit 1 ;;
+            esac
+          done <<<"$SMOKE_PATHS"
